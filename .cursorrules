@@ -1,0 +1,64 @@
+# Xylella_SPQR (GrainGuard) — Cursor Rules
+
+## Project Overview
+GrainGuard domain simulation for TattleTots. Grid-based precision agriculture
+model with physical drone/tractor Tots, co-evolutionary pest dynamics,
+competing architectures, and phased deployment scenarios.
+This repo is a TESTBED for TattleTots — it implements the DomainAdapter interface.
+
+## Architecture
+- `src/grain_guard/environment/` — Field, crop, pest, weed, weather dynamics
+- `src/grain_guard/sensors/` — Satellite, drone imagery, traps, weather, soil, yield
+- `src/grain_guard/equipment/` — Physical Tot body plans, genomes
+- `src/grain_guard/users/` — Ag-domain user profiles (2 roles)
+- `src/grain_guard/architectures/` — Competing architectures A0-A3
+- `src/grain_guard/adapter/` — TattleTots DomainAdapter implementation
+- `src/grain_guard/metrics/` — Spec §9 falsification metrics
+- `src/grain_guard/scenarios/` — Phased deployment configs
+- `tests/` — pytest suite (unit, smoke, integration)
+
+## Key Design Principles
+1. **Domain-specific**: This repo IS the agricultural domain. TattleTots is domain-agnostic.
+2. **No strawmen**: All competing architectures get identical sensor/hardware access.
+3. **Co-evolutionary pests**: 1-locus resistance + behavioral escape evolves under management pressure.
+4. **Equipment are physical Tots**: Body plans (hardware, fixed) + genomes (behavior, evolves).
+5. **Phased deployment**: 3-season spiral acquisition from spec §8.
+6. **Falsification-first**: BMA must reduce total cost to matter (spec §10).
+7. **Three landscapes**: Monoculture → Orchard → Intercrop (escalating complexity).
+
+## Code Conventions
+- Python 3.11+ with strict typing (mypy strict mode)
+- Pydantic v2 for all data models
+- NumPy for numerical operations
+- All modules use `from __future__ import annotations`
+- Ruff for linting and formatting (line length 100)
+- Tests use pytest with `smoke`, `slow`, `integration` markers
+
+## Development Commands
+```bash
+pip install -e ".[dev]"          # Install with dev dependencies
+ruff check src/ tests/           # Lint
+ruff format src/ tests/          # Format
+mypy src/                        # Type check
+pytest                           # All tests
+pytest -m smoke                  # Smoke tests only
+grain-guard --steps 200 --verbose  # Run simulation
+```
+
+## Critical Invariants
+- Pest resistance frequency is bounded [0, 1]
+- Weed seed bank is non-negative
+- Crop health is bounded [0, 1]
+- Equipment body plans do NOT mutate (hardware is fixed)
+- Equipment genome behavioral fractions must sum to 1.0
+- Soil moisture is bounded [0, 1]
+- Satellite sensor only observes on revisit cadence
+- Biological control tracks pest density with lag
+
+## When Adding New Features
+- New sensors: add to `sensors/`, wire into `adapter/grain_adapter.py` streams
+- New architectures: subclass `Architecture` in `architectures/`
+- New body plans: add factory method to `BodyPlan`
+- New genome traits: add to `EquipmentGenome` with mutation logic
+- New pest/weed species: add to corresponding enum + adjust parameters
+- Always add corresponding tests
