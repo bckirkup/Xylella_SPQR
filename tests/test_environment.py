@@ -149,6 +149,54 @@ class TestCropField:
         types = {f.crops[r][c].crop_type for r in range(10) for c in range(10)}
         assert len(types) > 1
 
+    def test_orchard_pest_species_diversity(self) -> None:
+        f = CropField(rows=10, cols=10, landscape=LandscapeType.ORCHARD)
+        species = {f.pests[r][c].species for r in range(10) for c in range(10)}
+        assert len(species) >= 2
+
+    def test_intercrop_pest_species_diversity(self) -> None:
+        f = CropField(rows=10, cols=10, landscape=LandscapeType.INTERCROP)
+        species = {f.pests[r][c].species for r in range(10) for c in range(10)}
+        assert len(species) >= 3
+
+    def test_intercrop_weed_species_diversity(self) -> None:
+        f = CropField(rows=10, cols=10, landscape=LandscapeType.INTERCROP)
+        species = {f.weeds[r][c].species for r in range(10) for c in range(10)}
+        assert len(species) >= 3
+
+    def test_landscape_modifiers_differ(self) -> None:
+        mono = CropField(rows=5, cols=5, landscape=LandscapeType.MONOCULTURE)
+        orch = CropField(rows=5, cols=5, landscape=LandscapeType.ORCHARD)
+        inter = CropField(rows=5, cols=5, landscape=LandscapeType.INTERCROP)
+        assert mono._landscape_pest_growth_modifier != orch._landscape_pest_growth_modifier
+        assert mono._landscape_weed_growth_modifier != inter._landscape_weed_growth_modifier
+        assert orch._landscape_biocontrol_boost > mono._landscape_biocontrol_boost
+
+    def test_landscape_differentiation_after_steps(self) -> None:
+        """Different landscapes must produce different pest/crop dynamics."""
+        rng_m = np.random.default_rng(42)
+        rng_o = np.random.default_rng(42)
+        rng_i = np.random.default_rng(42)
+        w = AgWeather(temperature=25.0, precipitation=1.0)
+
+        mono = CropField(rows=10, cols=10, landscape=LandscapeType.MONOCULTURE)
+        orch = CropField(rows=10, cols=10, landscape=LandscapeType.ORCHARD)
+        inter = CropField(rows=10, cols=10, landscape=LandscapeType.INTERCROP)
+
+        for f, rng in [(mono, rng_m), (orch, rng_o), (inter, rng_i)]:
+            f.stochastic_pest_introduction(rng, probability=1.0)
+            for _ in range(50):
+                f.step(w, rng)
+
+        # Pest dynamics should differ across landscapes
+        pest_densities = [
+            mono.total_pest_density(),
+            orch.total_pest_density(),
+            inter.total_pest_density(),
+        ]
+        # Not all identical
+        assert len(set(round(d, 2) for d in pest_densities)) > 1
+
     def test_step_runs(self) -> None:
         rng = np.random.default_rng(42)
         f = CropField(rows=5, cols=5)

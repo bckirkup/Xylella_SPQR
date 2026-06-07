@@ -75,6 +75,31 @@ class TestCentralizedPlatform:
         result = arch.step(field_with_pests, weather, time_step=0)
         assert "n_sprays" in result
 
+    def test_sprays_when_pests_present(
+        self, field_with_pests: CropField, weather: AgWeather
+    ) -> None:
+        """A3 must actually spray when pest density is above EIL."""
+        # Boost pest density to ensure EIL is exceeded
+        for r in range(field_with_pests.rows):
+            for c in range(field_with_pests.cols):
+                field_with_pests.pests[r][c].density = 50.0
+        arch = CentralizedPlatform()
+        result = arch.step(field_with_pests, weather, time_step=0)
+        assert result["n_sprays"] > 0
+
+    def test_eil_varies_with_biocontrol(self) -> None:
+        """EIL should increase when biological control density rises."""
+        from grain_guard.environment.crop import CropCell
+        from grain_guard.environment.pest import PestPopulation
+
+        arch = CentralizedPlatform()
+        crop = CropCell(health=1.0)
+        pest = PestPopulation(species="aphid", density=10.0)
+        eil_low = arch._compute_eil(crop, pest, bio_density=0.0)
+        eil_high = arch._compute_eil(crop, pest, bio_density=40.0)
+        # More biocontrol → lower K → higher EIL (spray less)
+        assert eil_high > eil_low
+
     def test_reset(self) -> None:
         arch = CentralizedPlatform()
         arch.reset()

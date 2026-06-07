@@ -29,6 +29,7 @@ class PrescriptionDrone(Architecture):
         self.map_update_interval = map_update_interval
         self.rng = np.random.default_rng(seed)
         self._prescription_map: dict[tuple[int, int], bool] = {}
+        self._baseline_ndvi: dict[tuple[int, int], float] = {}
 
     def step(
         self,
@@ -71,13 +72,36 @@ class PrescriptionDrone(Architecture):
         }
 
     def _update_prescription(self, field: CropField) -> None:
-        """Generate prescription map from NDVI stress signals."""
+        """Generate prescription map from NDVI anomaly detection.
+
+        Instead of a raw NDVI threshold (which flags healthy seedlings),
+        compare each cell's current NDVI to the field-wide median for its
+        growth stage. Cells that are significantly below their peer median
+        are flagged as stressed.
+        """
         self._prescription_map.clear()
+        # Group cells by growth stage to get stage-level NDVI medians
+        stage_ndvi: dict[str, list[float]] = {}
         for r in range(field.rows):
             for c in range(field.cols):
-                ndvi = field.crops[r][c].ndvi_proxy
-                if ndvi < self.ndvi_stress_threshold:
+                crop = field.crops[r][c]
+                stage = crop.growth_stage.value
+                stage_ndvi.setdefault(stage, []).append(crop.ndvi_proxy)
+        stage_median: dict[str, float] = {}
+        for stage, values in stage_ndvi.items():
+            sorted_vals = sorted(values)
+            mid = len(sorted_vals) // 2
+            stage_median[stage] = sorted_vals[mid]
+
+        for r in range(field.rows):
+            for c in range(field.cols):
+                crop = field.crops[r][c]
+                stage = crop.growth_stage.value
+                median = stage_median.get(stage, 0.5)
+                # Flag cells whose NDVI is > 30% below their stage median
+                if median > 0 and crop.ndvi_proxy < median * (1.0 - self.ndvi_stress_threshold):
                     self._prescription_map[(r, c)] = True
 
     def reset(self) -> None:
         self._prescription_map.clear()
+        self._baseline_ndvi.clear()
