@@ -5,7 +5,9 @@ from __future__ import annotations
 import numpy as np
 
 from grain_guard.architectures.base import Architecture
+from grain_guard.environment.crop import CropCell
 from grain_guard.environment.field import CropField
+from grain_guard.environment.pest import PestPopulation
 from grain_guard.environment.weather import AgWeather
 
 
@@ -87,17 +89,18 @@ class CentralizedPlatform(Architecture):
             "missed_cells": missed,
         }
 
-    def _compute_eil(self, crop: object, pest: object, bio_density: float) -> float:
-        """Compute EIL = C / (V * D * I * K) (spec §3.3)."""
-        c = 2.0
-        v = 5.0
-        d = 0.1
-        i = 0.05
-        k = max(0.1, 1.0 - bio_density * 0.02)
-        denominator = v * d * i * k
-        if denominator <= 0:
-            return float("inf")
-        return c / denominator
+    def _compute_eil(self, crop: CropCell, pest: PestPopulation, bio_density: float) -> float:
+        """Compute Economic Injury Level (spec §3.3).
+
+        Uses a practical formulation: base threshold scaled by crop value
+        at risk and biological control suppression. Higher biocontrol density
+        → higher threshold (let beneficials work before spraying).
+
+        EIL = base_threshold * (1 + biocontrol_suppression) / vulnerability
+        """
+        vulnerability = max(0.2, crop.health)  # healthier crops = more at stake
+        bio_suppression = self.biocontrol_weight * min(bio_density / 10.0, 2.0)
+        return self.pest_threshold * (1.0 + bio_suppression) / vulnerability
 
     def reset(self) -> None:
         pass

@@ -75,16 +75,91 @@ class CropField(BaseModel):
             self.crops.append(row)
 
     def _initialize_pests(self) -> None:
-        self.pests = [
-            [PestPopulation(species=PestSpecies.APHID) for _ in range(self.cols)]
-            for _ in range(self.rows)
-        ]
+        """Initialize pests with landscape-appropriate species diversity."""
+        self.pests = []
+        for r in range(self.rows):
+            row: list[PestPopulation] = []
+            for c in range(self.cols):
+                if self.landscape == LandscapeType.MONOCULTURE:
+                    sp = PestSpecies.APHID
+                elif self.landscape == LandscapeType.ORCHARD:
+                    sp = [PestSpecies.APHID, PestSpecies.ARMYWORM][(r + c) % 2]
+                else:
+                    sp = [PestSpecies.APHID, PestSpecies.ROOTWORM, PestSpecies.ARMYWORM][
+                        (r + c) % 3
+                    ]
+                row.append(PestPopulation(species=sp))
+            self.pests.append(row)
 
     def _initialize_weeds(self) -> None:
-        self.weeds = [
-            [WeedPopulation(species=WeedSpecies.PIGWEED) for _ in range(self.cols)]
-            for _ in range(self.rows)
-        ]
+        """Initialize weeds with landscape-appropriate species diversity."""
+        self.weeds = []
+        for r in range(self.rows):
+            row: list[WeedPopulation] = []
+            for c in range(self.cols):
+                if self.landscape == LandscapeType.MONOCULTURE:
+                    sp = WeedSpecies.PIGWEED
+                elif self.landscape == LandscapeType.ORCHARD:
+                    sp = [WeedSpecies.PIGWEED, WeedSpecies.FOXTAIL][(r + c) % 2]
+                else:
+                    sp = [WeedSpecies.PIGWEED, WeedSpecies.FOXTAIL, WeedSpecies.WATERHEMP][
+                        (r + c) % 3
+                    ]
+                row.append(WeedPopulation(species=sp))
+            self.weeds.append(row)
+
+    @property
+    def _landscape_pest_growth_modifier(self) -> float:
+        """Pest growth multiplier: monoculture=1.0 (easy), orchard=1.3, intercrop=0.8.
+
+        Orchards provide more microhabitat for pests (3D canopy).
+        Intercropping disrupts pest host-finding (trap-crop effect).
+        """
+        return {
+            LandscapeType.MONOCULTURE: 1.0,
+            LandscapeType.ORCHARD: 1.3,
+            LandscapeType.INTERCROP: 0.8,
+        }[self.landscape]
+
+    @property
+    def _landscape_weed_growth_modifier(self) -> float:
+        """Weed growth multiplier: monoculture=1.0, orchard=0.7 (shade), intercrop=0.6.
+
+        Orchards partially shade ground (moderate weed suppression).
+        Intercrop living mulch strongly suppresses weeds.
+        """
+        return {
+            LandscapeType.MONOCULTURE: 1.0,
+            LandscapeType.ORCHARD: 0.7,
+            LandscapeType.INTERCROP: 0.6,
+        }[self.landscape]
+
+    @property
+    def _landscape_dispersal_modifier(self) -> float:
+        """Pest dispersal multiplier: open monoculture spreads easily, orchard/intercrop barriers slow it."""
+        return {
+            LandscapeType.MONOCULTURE: 1.0,
+            LandscapeType.ORCHARD: 0.6,
+            LandscapeType.INTERCROP: 0.5,
+        }[self.landscape]
+
+    @property
+    def _landscape_detection_penalty(self) -> float:
+        """Detection difficulty: monoculture=0 (easy), orchard=0.3 (3D canopy), intercrop=0.2 (mixed spectra)."""
+        return {
+            LandscapeType.MONOCULTURE: 0.0,
+            LandscapeType.ORCHARD: 0.3,
+            LandscapeType.INTERCROP: 0.2,
+        }[self.landscape]
+
+    @property
+    def _landscape_biocontrol_boost(self) -> float:
+        """Beneficial insect carrying capacity multiplier: polycultures support more."""
+        return {
+            LandscapeType.MONOCULTURE: 1.0,
+            LandscapeType.ORCHARD: 1.8,
+            LandscapeType.INTERCROP: 2.0,
+        }[self.landscape]
 
     def step(self, weather: AgWeather, rng: np.random.Generator) -> None:
         """Advance the field one time step."""
@@ -112,24 +187,40 @@ class CropField(BaseModel):
                 crop.apply_damage(pest_damage + weed_damage)
 
     def _advance_pests(self, weather: AgWeather, rng: np.random.Generator) -> None:
+        growth_mod = self._landscape_pest_growth_modifier
+        detection_penalty = self._landscape_detection_penalty
+        bio_boost = self._landscape_biocontrol_boost
         for r in range(self.rows):
             for c in range(self.cols):
                 pest = self.pests[r][c]
-                pest.grow(rng, self.crops[r][c].health)
-                detection_pressure = 1.0 - pest.night_feeding * 0.5
+                # Landscape modifies effective carrying capacity
+                pest.grow(rng, self.crops[r][c].health * growth_mod)
+                # Cover crops boost beneficial insects → suppress pests
+                if self.crops[r][c].is_cover_crop:
+                    bio_idx = r * self.cols + c
+                    bio = self.biological_control[bio_idx] * bio_boost
+                    pest.density = max(0.0, pest.density - bio * 0.01)
+                # Detection pressure reduced in complex canopies
+                detection_pressure = max(0.0, (1.0 - pest.night_feeding * 0.5) - detection_penalty)
                 pest.evolve_behavior(rng, detection_pressure)
 
     def _advance_weeds(self, rng: np.random.Generator) -> None:
+        weed_mod = self._landscape_weed_growth_modifier
         for r in range(self.rows):
             for c in range(self.cols):
-                self.weeds[r][c].grow(rng, self.crops[r][c].soil_moisture)
+                # Cover crop alleys suppress weeds
+                moisture = self.crops[r][c].soil_moisture
+                if self.crops[r][c].is_cover_crop:
+                    moisture *= 0.5  # Cover crop competes for moisture
+                self.weeds[r][c].grow(rng, moisture * weed_mod)
 
     def _pest_dispersal(self, weather: AgWeather, rng: np.random.Generator) -> None:
         """Diffuse pest populations to neighboring cells."""
+        dispersal_mod = self._landscape_dispersal_modifier
         new_densities = np.zeros((self.rows, self.cols))
         for r in range(self.rows):
             for c in range(self.cols):
-                dispersal_frac = self.pests[r][c].disperse(weather.wind_speed, rng)
+                dispersal_frac = self.pests[r][c].disperse(weather.wind_speed, rng) * dispersal_mod
                 emigrants = self.pests[r][c].density * dispersal_frac
                 self.pests[r][c].density -= emigrants
                 neighbors = self._neighbors(r, c)
@@ -142,15 +233,27 @@ class CropField(BaseModel):
                 self.pests[r][c].density += new_densities[r, c]
 
     def _update_biological_control(self, rng: np.random.Generator) -> None:
-        """Beneficial insect populations track pest density with lag."""
+        """Beneficial insect populations track pest density with lag.
+
+        Polyculture landscapes support higher beneficial insect populations
+        (more habitat, prey diversity). Cover crop cells get an extra boost.
+        """
+        boost = self._landscape_biocontrol_boost
         for r in range(self.rows):
             for c in range(self.cols):
                 idx = r * self.cols + c
                 pest_density = self.pests[r][c].density
-                target = pest_density * 0.3
+                target = pest_density * 0.3 * boost
+                # Cover crops attract beneficials
+                if self.crops[r][c].is_cover_crop:
+                    target *= 1.5
                 current = self.biological_control[idx]
                 self.biological_control[idx] = float(
-                    np.clip(current + 0.1 * (target - current) + rng.normal(0, 0.5), 0.0, 50.0)
+                    np.clip(
+                        current + 0.1 * (target - current) + rng.normal(0, 0.5),
+                        0.0,
+                        50.0 * boost,
+                    )
                 )
 
     def _neighbors(self, r: int, c: int) -> list[tuple[int, int]]:
