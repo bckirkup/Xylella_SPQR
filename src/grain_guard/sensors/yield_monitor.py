@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from grain_guard.environment.crop import CropCell, GrowthStage
 
@@ -14,11 +14,13 @@ class YieldMonitor(BaseModel):
     Only produces data after crops reach MATURE or HARVESTED stage.
     """
 
+    n_zones: int = Field(default=5, ge=1, description="Number of yield aggregation zones")
+
     def observe(self, crops: list[list[CropCell]], rng: np.random.Generator) -> np.ndarray | None:
         """Return per-zone yield vector or None if not harvest time.
 
         Only returns data when >50% of cells are mature or harvested.
-        Output dimensionality: n_zones (5).
+        Output dimensionality: n_zones.
         """
         rows = len(crops)
         cols = len(crops[0]) if rows > 0 else 0
@@ -35,11 +37,10 @@ class YieldMonitor(BaseModel):
         if mature_count < total_cells * 0.5:
             return None
 
-        n_zones = 5
         zone_yields: list[float] = []
-        for z in range(n_zones):
-            r_start = z * rows // n_zones
-            r_end = (z + 1) * rows // n_zones
+        for z in range(self.n_zones):
+            r_start = z * rows // self.n_zones
+            r_end = (z + 1) * rows // self.n_zones
             zone_yield = 0.0
             zone_count = 0
             for r in range(r_start, max(r_end, r_start + 1)):
@@ -53,4 +54,4 @@ class YieldMonitor(BaseModel):
 
     @property
     def output_dim(self) -> int:
-        return 5
+        return self.n_zones
