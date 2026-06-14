@@ -46,6 +46,21 @@ src/grain_guard/
 | A3 | Centralized Platform | Full satellite/drone/IoT fusion (strongest competitor) |
 | A4 | BMA / TattleTots | Self-organizing drone/tractor ecology |
 
+## Integrated Mode (with TattleTots Agent Ecology)
+
+Run the full integration — domain generates sensor streams while TattleTots agents compress, escalate, evolve, and compete:
+
+```bash
+python scripts/run_with_tattletots.py \
+    --config configs/tattletots_integration.json \
+    --output results.json \
+    --verbose
+```
+
+This produces unified JSON output (`tattletots.output_schema.SimulationOutput`) with consistent `ecology_metrics` and `cost_metrics` fields, enabling cross-domain comparison with the sibling repos ([Coral_Key_in_Three_Hour_Epochs](https://github.com/bckirkup/Coral_Key_in_Three_Hour_Epochs), [Scrapiron_and_the_Bear](https://github.com/bckirkup/Scrapiron_and_the_Bear)).
+
+See [docs/COORDINATION.md](docs/COORDINATION.md) for full coordination guide, configuration reference, and comparison examples.
+
 ## Development
 
 ```bash
