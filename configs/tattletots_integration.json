@@ -1,0 +1,28 @@
+{
+  "simulation": {
+    "initial_population": 20,
+    "max_population": 60,
+    "max_steps": 200,
+    "seed": 42,
+    "mutation_rate": 0.1,
+    "recombination_probability": 0.3,
+    "false_alarm_penalty": 0.4,
+    "trust_delta_neg": 0.2,
+    "trust_delta_pos": 0.05,
+    "trust_delta_miss": 0.15,
+    "subsidy_rate": 0.1,
+    "max_stream_dim": 30
+  },
+  "domain": {
+    "landscape": "monoculture",
+    "grid_rows": 20,
+    "grid_cols": 20,
+    "steps": 200,
+    "seed": 42,
+    "n_traps": 10,
+    "n_weather_stations": 2,
+    "n_soil_sensors": 4,
+    "satellite_revisit": 5,
+    "pest_threshold": 10.0
+  }
+}
