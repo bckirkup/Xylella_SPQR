@@ -46,6 +46,43 @@ environment → sensors → equipment → users → architectures → adapter �
 - Behavioral fractions (scout/treat/report) are normalized to sum to 1.0
 - Pest evolution tracks resistance allele frequency [0, 1] and behavioral escape traits
 
+## Integrated Mode (TattleTots Agent Ecology)
+
+```bash
+python scripts/run_with_tattletots.py \
+    --config configs/tattletots_integration.json \
+    --output results.json --verbose
+```
+
+Output conforms to `tattletots.output_schema.SimulationOutput` (unified JSON).
+See `docs/COORDINATION.md` for coordination with sibling repos.
+
+## GPU Acceleration
+
+```bash
+pip install -e ".[gpu]"  # installs cupy-cuda12x
+```
+
+Set `"use_gpu": true` in the `"simulation"` section of the integration config.
+Falls back silently to NumPy if CuPy or CUDA is unavailable.
+
+## Parameter Scans
+
+Generate config variants and run in parallel for large sweeps:
+
+```bash
+python scripts/run_with_tattletots.py --config <variant>.json --output results/<name>.json
+```
+
+Key domain parameters to sweep: `landscape` (monoculture/orchard/intercrop),
+`pest_initial_density`, `resistance_frequency`, `steps`, `seed`.
+
+Load results:
+```python
+from tattletots.output_schema import SimulationOutput
+result = SimulationOutput.model_validate_json(path.read_text())
+```
+
 ## Testing Accounts
 
 No external services required. All simulation is self-contained.
