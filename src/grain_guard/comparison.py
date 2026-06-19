@@ -90,9 +90,7 @@ def _evolve_weather(time_step: int, rng: np.random.Generator) -> AgWeather:
         humidity=float(np.clip(0.5 + 0.2 * np.cos(phase) + rng.normal(0, 0.05), 0, 1)),
         wind_speed=max(0.0, 4.0 + 2.0 * np.sin(phase * 0.5) + float(rng.normal(0, 1))),
         wind_direction=float((180.0 + 90.0 * np.sin(phase * 0.3)) % 360),
-        precipitation=max(
-            0.0, float(rng.exponential(2.0) if rng.random() < 0.2 else 0.0)
-        ),
+        precipitation=max(0.0, float(rng.exponential(2.0) if rng.random() < 0.2 else 0.0)),
         solar_radiation=max(0.0, 15.0 + 8.0 * np.sin(phase) + float(rng.normal(0, 1))),
     )
 

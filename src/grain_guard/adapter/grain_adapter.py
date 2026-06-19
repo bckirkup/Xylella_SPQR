@@ -275,9 +275,7 @@ class GrainGuardAdapter(DomainAdapter):
         """Advance agricultural simulation and update all sensor streams."""
         self._current_step = time_step
         self._evolve_weather(time_step)
-        self._field.stochastic_pest_introduction(
-            self.rng, probability=self._pest_intro_probability
-        )
+        self._field.stochastic_pest_introduction(self.rng, probability=self._pest_intro_probability)
         self._field.step(self._weather, self.rng)
         self._update_streams(time_step)
 

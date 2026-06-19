@@ -72,12 +72,8 @@ class TestAdapterProperties:
         assert adapter.weather is not None
 
     def test_pest_intro_probability(self) -> None:
-        low = GrainGuardAdapter(
-            grid_rows=10, grid_cols=10, seed=42, pest_intro_probability=0.0
-        )
-        high = GrainGuardAdapter(
-            grid_rows=10, grid_cols=10, seed=42, pest_intro_probability=1.0
-        )
+        low = GrainGuardAdapter(grid_rows=10, grid_cols=10, seed=42, pest_intro_probability=0.0)
+        high = GrainGuardAdapter(grid_rows=10, grid_cols=10, seed=42, pest_intro_probability=1.0)
         for step in range(5):
             low.step(step)
             high.step(step)
