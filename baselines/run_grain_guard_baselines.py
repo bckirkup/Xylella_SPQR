@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """Parameter Scan Runner for Grain Guard Baselines (Without TattleTots).
 
-This script runs a parameter scan for the Grain Guard simulation using ONLY
-the baseline management architectures (A0, A1, A2, A3). It sweeps landscape,
-pest pressure, weed pressure, and resistance initial frequency, running each
-combination in triplicate for 800 steps.
+Run from the workspace root (parent of all repos):
 
-All results are consolidated into exactly three output files to prevent clutter.
-
-Usage:
-    python run_grain_guard_baselines.py --smoke-test
-    python run_grain_guard_baselines.py
+    python Xylella_SPQR/baselines/run_grain_guard_baselines.py --smoke-test
+    python Xylella_SPQR/baselines/run_grain_guard_baselines.py --workers 8
 """
 
 from __future__ import annotations
@@ -26,9 +20,21 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from baseline_parallel import resolve_worker_count, run_process_pool
-
 from grain_guard.comparison import ComparisonConfig, run_comparison
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+for _parent in [_SCRIPT_DIR, *_SCRIPT_DIR.parents]:
+    _large_experiments = _parent / "TattleTots" / "Large Experiments"
+    if (_large_experiments / "baseline_parallel.py").is_file():
+        sys.path.insert(0, str(_large_experiments))
+        break
+else:
+    sys.exit(
+        "[-] Error: Could not find TattleTots/Large Experiments/baseline_parallel.py.\n"
+        "    Ensure all repos are cloned as siblings under a common workspace root."
+    )
+
+from baseline_parallel import resolve_worker_count, run_process_pool
 
 
 def run_single_simulation(
@@ -84,26 +90,12 @@ def main() -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("grain_guard_baselines_config.json"),
+        default=_SCRIPT_DIR / "grain_guard_baselines_config.json",
         help="Path to parameter scan config JSON file",
     )
-    parser.add_argument(
-        "--smoke-test",
-        action="store_true",
-        help="Run a fast smoke test of the parameter scan",
-    )
-    parser.add_argument(
-        "--parallel",
-        action="store_true",
-        default=True,
-        help="Run simulations in parallel (default: True)",
-    )
-    parser.add_argument(
-        "--no-parallel",
-        action="store_false",
-        dest="parallel",
-        help="Run simulations sequentially",
-    )
+    parser.add_argument("--smoke-test", action="store_true", help="Run a fast smoke test")
+    parser.add_argument("--parallel", action="store_true", default=True)
+    parser.add_argument("--no-parallel", action="store_false", dest="parallel")
     parser.add_argument(
         "--workers",
         type=int,

@@ -1,30 +1,32 @@
 # Baseline Comparisons (Without TattleTots)
 
-This directory contains scripts and results for running the Grain Guard simulation
-using **only** the conventional baseline management architectures (A0-A3), without
-the TattleTots agent ecology.
+Parameter scans using **only** conventional baseline architectures (A0–A3), no TattleTots agent ecology.
 
-## Contents
+## Run from workspace root
+
+```bash
+cd D:\TotsFiles
+python Xylella_SPQR/baselines/run_grain_guard_baselines.py --smoke-test
+python Xylella_SPQR/baselines/run_grain_guard_baselines.py --workers 8
+```
+
+Parallel mode uses **ProcessPoolExecutor** (separate Python worker processes).
+
+## Files
 
 | File | Purpose |
 |------|---------|
-| `run_grain_guard_baselines.py` | Parameter scan runner sweeping landscape type, pest pressure, weed pressure, and resistance frequency |
-| `grain_guard_baselines_config.json` | Scan configuration (factors, seeds, steps) |
-| `grain_guard_baselines_results.zip` | Pre-computed results from a full parameter scan |
+| `run_grain_guard_baselines.py` | Parameter scan runner |
+| `grain_guard_baselines_config.json` | Factor levels, seeds, steps |
+| `grain_guard_baselines_results.zip` | Pre-computed results (optional) |
 
-## Usage
+## Shared utilities
 
-These scripts are designed to run from a workspace root that has all domain repos
-installed. They depend on `baseline_parallel` (a shared utility in the TattleTots
-`Large Experiments/` directory).
+Multiprocessing helpers live in `TattleTots/Large Experiments/baseline_parallel.py`.
+
+## Prerequisites
 
 ```bash
-# From the workspace root (parent of all repos):
-python Xylella_SPQR/baselines/run_grain_guard_baselines.py --smoke-test
+pip install -e TattleTots[dev]
+pip install -e Xylella_SPQR[dev]
 ```
-
-## Relationship to TattleTots
-
-These baselines serve as the **control group** for evaluating TattleTots agent
-ecology performance. Compare results here against the integrated runs produced by
-`scripts/run_with_tattletots.py`.
