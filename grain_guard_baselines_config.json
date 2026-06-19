@@ -1,0 +1,23 @@
+{
+  "output_directory": "grain_guard_baselines_results",
+  "steps": 800,
+  "seeds": [42, 43, 44],
+  "grid_rows": 20,
+  "grid_cols": 20,
+  "factors": {
+    "landscape": ["monoculture", "orchard", "intercrop"],
+    "pest_pressure": ["low", "medium", "high"],
+    "weed_pressure": ["low", "medium", "high"],
+    "resistance_initial_frequency": [0.01, 0.05, 0.10, 0.20]
+  },
+  "pest_pressure_levels": {
+    "low": {"intro_probability": 0.01, "density_boost": 0.5},
+    "medium": {"intro_probability": 0.02, "density_boost": 1.0},
+    "high": {"intro_probability": 0.05, "density_boost": 2.0}
+  },
+  "weed_pressure_levels": {
+    "low": {"density_base": 0.0},
+    "medium": {"density_base": 2.0},
+    "high": {"density_base": 5.0}
+  }
+}
