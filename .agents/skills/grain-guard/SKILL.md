@@ -46,7 +46,21 @@ environment → sensors → equipment → users → architectures → adapter �
 - Behavioral fractions (scout/treat/report) are normalized to sum to 1.0
 - Pest evolution tracks resistance allele frequency [0, 1] and behavioral escape traits
 
-## Integrated Mode (TattleTots Agent Ecology)
+## TattleTots Integration
+
+The adapter (`adapter/grain_adapter.py`) implements `DomainAdapter`:
+- `get_streams()` → pest, satellite, pheromone, soil sensor streams
+- `get_users()` → 2 ag-domain user profiles
+- `step(time_step)` → advances pest/crop/weather sim, updates streams
+- `get_ground_truth(time_step)` → True if pest density exceeds threshold
+- `get_active_locations(time_step)` → returns `(row, col)` of cells above pest threshold
+- `infer_report_location(stream_data, stream_labels)` → finds peak in pest stream → maps to field `(row, col)`
+- `score_relevance(signal, user)` → domain-specific relevance
+- `compute_costs(...)` → scouting + treatment + damage costs
+
+**Note:** The integration loop uses `world.set_event_state(adapter.get_active_locations(step))` (not `set_ground_truth`). The engine verifies report correctness per-location.
+
+### Running Integrated Mode
 
 ```bash
 python scripts/run_with_tattletots.py \
@@ -56,6 +70,13 @@ python scripts/run_with_tattletots.py \
 
 Output conforms to `tattletots.output_schema.SimulationOutput` (unified JSON).
 See `docs/COORDINATION.md` for coordination with sibling repos.
+
+### Baselines
+
+Standalone baseline comparison files live in `baselines/`:
+- `run_grain_guard_baselines.py` — Parameter scan runner for A0-A3 architectures
+- `grain_guard_baselines_config.json` — Scan configuration
+- `grain_guard_baselines_results.zip` — Pre-computed results
 
 ## GPU Acceleration
 
