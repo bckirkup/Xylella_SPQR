@@ -227,9 +227,8 @@ def main(argv: list[str] | None = None) -> int:
             mean_cost_per_step=cost_summary["mean_cost_per_step"],
         ),
         domain_metrics=ag_metrics.summary(),
-        time_series=TimeSeries(
-            population=world.telemetry.population_history(),
-            cost_per_step=cost_accumulator.cost_history(),
+        time_series=TimeSeries.from_telemetry(
+            world.telemetry, cost_accumulator.cost_history()
         ),
     )
 
