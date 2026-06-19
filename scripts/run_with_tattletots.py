@@ -33,6 +33,36 @@ from grain_guard.adapter.grain_adapter import GrainGuardAdapter
 from grain_guard.environment.field import LandscapeType
 from grain_guard.metrics.ag_metrics import AgMetrics, StepMetrics
 
+_GRAIN_ADAPTER_KEYS = (
+    "grid_rows",
+    "grid_cols",
+    "seed",
+    "n_traps",
+    "n_weather_stations",
+    "n_soil_sensors",
+    "satellite_revisit",
+    "pest_threshold",
+    "engine_max_dim",
+    "pest_intro_probability",
+    "resistance_initial_frequency",
+)
+
+
+def _grain_adapter_kwargs(domain_cfg: dict, sim_config: SimulationConfig | None = None) -> dict:
+    """Map domain config JSON to GrainGuardAdapter constructor kwargs."""
+    kwargs: dict = {
+        "grid_rows": domain_cfg.get("grid_rows", 20),
+        "grid_cols": domain_cfg.get("grid_cols", 20),
+        "landscape": LandscapeType(domain_cfg.get("landscape", "monoculture")),
+        "seed": domain_cfg.get("seed", 42),
+    }
+    for key in _GRAIN_ADAPTER_KEYS:
+        if key in domain_cfg:
+            kwargs[key] = domain_cfg[key]
+    if "engine_max_dim" not in kwargs and sim_config is not None:
+        kwargs["engine_max_dim"] = sim_config.max_stream_dim
+    return kwargs
+
 
 def main(argv: list[str] | None = None) -> int:
     """Run integrated GrainGuard + TattleTots simulation."""
@@ -64,11 +94,12 @@ def main(argv: list[str] | None = None) -> int:
             raw = json.load(f)
         sim_config = SimulationConfig(**raw.get("simulation", {}))
         domain_cfg = raw.get("domain", {})
-        landscape = LandscapeType(domain_cfg.get("landscape", "monoculture"))
-        grid_rows = domain_cfg.get("grid_rows", 20)
-        grid_cols = domain_cfg.get("grid_cols", 20)
+        kwargs = _grain_adapter_kwargs(domain_cfg, sim_config)
+        landscape = kwargs["landscape"]
+        grid_rows = kwargs["grid_rows"]
+        grid_cols = kwargs["grid_cols"]
         steps = domain_cfg.get("steps", args.steps)
-        seed = domain_cfg.get("seed", args.seed)
+        seed = kwargs["seed"]
     else:
         sim_config = SimulationConfig(
             initial_population=args.population,
@@ -87,14 +118,10 @@ def main(argv: list[str] | None = None) -> int:
             "steps": steps,
             "seed": seed,
         }
+        kwargs = _grain_adapter_kwargs(domain_cfg, sim_config)
 
     # Build domain adapter
-    adapter = GrainGuardAdapter(
-        grid_rows=grid_rows,
-        grid_cols=grid_cols,
-        landscape=landscape,
-        seed=seed,
-    )
+    adapter = GrainGuardAdapter(**kwargs)
 
     # Build TattleTots world
     world = World(config=sim_config)
@@ -112,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     print("=== GrainGuard + TattleTots Integration ===")
     print(
         f"  Steps: {steps}, Landscape: {landscape.value}, "
+        f"Pest intro: {domain_cfg.get('pest_intro_probability', 0.02)}, "
         f"Population: {sim_config.initial_population}, Seed: {seed}"
     )
     print()

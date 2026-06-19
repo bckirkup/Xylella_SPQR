@@ -106,10 +106,14 @@ class GrainGuardAdapter(DomainAdapter):
         pest_threshold: float = 10.0,
         cost_coefficients: CostCoefficients | None = None,
         engine_max_dim: int = DEFAULT_ENGINE_MAX_DIM,
+        pest_intro_probability: float = 0.02,
+        resistance_initial_frequency: float = 0.01,
         seed: int = 42,
     ) -> None:
         self.rng = np.random.default_rng(seed)
         self._field = CropField(rows=grid_rows, cols=grid_cols, landscape=landscape)
+        self._pest_intro_probability = pest_intro_probability
+        self._apply_resistance_frequency(resistance_initial_frequency)
         self._weather = AgWeather()
 
         self._satellite = SatelliteSensor(
@@ -132,6 +136,15 @@ class GrainGuardAdapter(DomainAdapter):
         self._setup_streams()
         self._warn_on_truncation()
         self._users = create_ag_users(n_signal_dims=self._total_stream_dims())
+
+    def _apply_resistance_frequency(self, frequency: float) -> None:
+        """Set initial herbicide resistance frequency across the field."""
+        if frequency == 0.01:
+            return
+        for r in range(self._field.rows):
+            for c in range(self._field.cols):
+                self._field.pests[r][c].resistance_freq = frequency
+                self._field.weeds[r][c].resistance_freq = frequency
 
     # ------------------------------------------------------------------
     # Sensor placement
@@ -262,7 +275,9 @@ class GrainGuardAdapter(DomainAdapter):
         """Advance agricultural simulation and update all sensor streams."""
         self._current_step = time_step
         self._evolve_weather(time_step)
-        self._field.stochastic_pest_introduction(self.rng)
+        self._field.stochastic_pest_introduction(
+            self.rng, probability=self._pest_intro_probability
+        )
         self._field.step(self._weather, self.rng)
         self._update_streams(time_step)
 

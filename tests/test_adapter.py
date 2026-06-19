@@ -70,3 +70,21 @@ class TestAdapterProperties:
         adapter = GrainGuardAdapter()
         adapter.step(0)
         assert adapter.weather is not None
+
+    def test_pest_intro_probability(self) -> None:
+        low = GrainGuardAdapter(
+            grid_rows=10, grid_cols=10, seed=42, pest_intro_probability=0.0
+        )
+        high = GrainGuardAdapter(
+            grid_rows=10, grid_cols=10, seed=42, pest_intro_probability=1.0
+        )
+        for step in range(5):
+            low.step(step)
+            high.step(step)
+        assert high.field.total_pest_density() >= low.field.total_pest_density()
+
+    def test_resistance_initial_frequency(self) -> None:
+        adapter = GrainGuardAdapter(
+            grid_rows=5, grid_cols=5, seed=1, resistance_initial_frequency=0.5
+        )
+        assert adapter.field.pests[0][0].resistance_freq == 0.5
