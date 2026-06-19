@@ -37,7 +37,7 @@ def _run_integrated(adapter: GrainGuardAdapter, world: World, steps: int) -> lis
     records = []
     for t in range(steps):
         adapter.step(t)
-        world.set_ground_truth(adapter.get_ground_truth(t))
+        world.set_event_state(adapter.get_active_locations(t))
         records.append(world.step())
     return records
 
@@ -81,9 +81,9 @@ class TestWorldIntegration:
         events = 0
         for t in range(200):
             adapter.step(t)
-            gt = adapter.get_ground_truth(t)
-            world.set_ground_truth(gt)
-            if gt:
+            locations = adapter.get_active_locations(t)
+            world.set_event_state(locations)
+            if locations:
                 events += 1
             world.step()
         assert events > 0
