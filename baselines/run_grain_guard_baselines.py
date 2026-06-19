@@ -24,9 +24,10 @@ import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from baseline_parallel import resolve_worker_count, run_process_pool
+
 from grain_guard.comparison import ComparisonConfig, run_comparison
 
 
@@ -40,7 +41,7 @@ def run_single_simulation(
     pest_density_boost: float,
     weed_density_base: float,
     resistance_initial_frequency: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run a single grain guard baseline comparison (A0-A3)."""
     start_time = time.time()
 
@@ -79,9 +80,7 @@ def run_single_simulation(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Parameter Scan Runner for Grain Guard Baselines"
-    )
+    parser = argparse.ArgumentParser(description="Parameter Scan Runner for Grain Guard Baselines")
     parser.add_argument(
         "--config",
         type=Path,
@@ -117,7 +116,7 @@ def main() -> int:
         print(f"[-] Error: Config file not found at {args.config}")
         return 1
 
-    with open(args.config, "r") as f:
+    with open(args.config) as f:
         config_data = json.load(f)
 
     output_dir_name = (
@@ -154,15 +153,13 @@ def main() -> int:
             "landscape": factors.get("landscape", ["monoculture"]),
             "pest_pressure": factors.get("pest_pressure", ["medium"]),
             "weed_pressure": factors.get("weed_pressure", ["medium"]),
-            "resistance_initial_frequency": factors.get(
-                "resistance_initial_frequency", [0.01]
-            ),
+            "resistance_initial_frequency": factors.get("resistance_initial_frequency", [0.01]),
         }
 
     factor_names = list(factor_grid.keys())
     factor_values = [factor_grid[name] for name in factor_names]
 
-    runs_to_execute: List[Dict[str, Any]] = []
+    runs_to_execute: list[dict[str, Any]] = []
     for combo in itertools.product(*factor_values):
         combo_dict = dict(zip(factor_names, combo, strict=True))
         landscape = combo_dict["landscape"]
@@ -218,18 +215,18 @@ def main() -> int:
         print(f"[*] Execution mode: SEQUENTIAL (single process, PID {os.getpid()})")
     print("=" * 60)
 
-    results_key: Dict[str, Any] = {
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    results_key: dict[str, Any] = {
+        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
         "is_smoke_test": args.smoke_test,
         "output_directory": str(output_dir),
         "runs": {},
     }
 
     start_time = time.time()
-    all_results: Dict[str, Any] = {}
-    logs: List[str] = []
+    all_results: dict[str, Any] = {}
+    logs: list[str] = []
 
-    def _store_success(run: Dict[str, Any], res: Dict[str, Any]) -> None:
+    def _store_success(run: dict[str, Any], res: dict[str, Any]) -> None:
         name = run["name"]
         results_key["runs"][name] = {
             "status": res["status"],
@@ -248,7 +245,7 @@ def main() -> int:
         all_results[name] = res.copy()
         logs.append(f"[+] Completed: {name} in {res['elapsed_seconds']:.2f}s")
 
-    def _store_failure(run: Dict[str, Any], exc: Exception) -> None:
+    def _store_failure(run: dict[str, Any], exc: Exception) -> None:
         results_key["runs"][run["name"]] = {"status": "failed", "error": str(exc)}
 
     submit_kwargs = [
@@ -302,7 +299,7 @@ def main() -> int:
     log_file_path = output_dir / "all_runs.log"
     with open(log_file_path, "w") as f:
         f.write("=== Grain Guard Baselines Parameter Scan Log ===\n")
-        f.write(f"Timestamp: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n")
+        f.write(f"Timestamp: {datetime.datetime.now(datetime.UTC).isoformat()}\n")
         f.write(f"Total Runs: {len(runs_to_execute)}\n")
         f.write(f"Total Elapsed Time: {total_elapsed:.1f}s\n")
         f.write("=" * 60 + "\n\n")
