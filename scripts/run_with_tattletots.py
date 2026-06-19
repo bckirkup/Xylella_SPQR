@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     for step in range(steps):
         # Advance domain
         adapter.step(step)
-        world.set_ground_truth(adapter.get_ground_truth(step))
+        world.set_event_state(adapter.get_active_locations(step))
 
         # Advance agent ecology
         record = world.step()

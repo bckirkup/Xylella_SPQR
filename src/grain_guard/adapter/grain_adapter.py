@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 from tattletots.interface.domain_adapter import DomainAdapter
+from tattletots.models.location import EventLocation
 from tattletots.models.stream import Stream, StreamType
 from tattletots.models.user import User
 
@@ -268,6 +269,27 @@ class GrainGuardAdapter(DomainAdapter):
     def get_ground_truth(self, time_step: int) -> bool:
         """An event is active if any cells have pest density above threshold."""
         return len(self._field.cells_above_threshold(self._pest_threshold)) > 0
+
+    def get_active_locations(self, time_step: int) -> list[EventLocation]:
+        """Return field cells where pest density exceeds threshold."""
+        return self._field.cells_above_threshold(self._pest_threshold)
+
+    def infer_report_location(
+        self,
+        stream_data: list[NDArray[np.float64]],
+        stream_labels: list[str],
+    ) -> EventLocation:
+        """Infer report location from pest density stream peak."""
+        for data, label in zip(stream_data, stream_labels, strict=False):
+            if "pest" in label and data.size > 0:
+                peak_idx = int(np.argmax(data))
+                cols = self._field.cols
+                return (peak_idx // cols, peak_idx % cols)
+        if stream_data and stream_data[0].size > 0:
+            peak_idx = int(np.argmax(np.abs(stream_data[0])))
+            cols = self._field.cols
+            return (peak_idx // cols, peak_idx % cols)
+        return (0, 0)
 
     def score_relevance(self, signal_vector: NDArray[np.float64], user: User) -> float:
         return float(user.compute_relevance(signal_vector))
