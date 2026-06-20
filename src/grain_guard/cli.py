@@ -15,7 +15,9 @@ def main(argv: list[str] | None = None) -> None:
 
     sim_parser = subparsers.add_parser("sim", help="Run a single simulation")
     sim_parser.add_argument("--steps", type=int, default=200)
-    sim_parser.add_argument("--landscape", default="monoculture", choices=["monoculture", "orchard", "intercrop"])
+    sim_parser.add_argument(
+        "--landscape", default="monoculture", choices=["monoculture", "orchard", "intercrop"]
+    )
     sim_parser.add_argument("--rows", type=int, default=20)
     sim_parser.add_argument("--cols", type=int, default=20)
     sim_parser.add_argument("--seed", type=int, default=42)
