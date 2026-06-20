@@ -60,7 +60,7 @@ The adapter (`adapter/grain_adapter.py`) implements `DomainAdapter`:
 - `get_ground_truth(time_step)` → True if pest density exceeds threshold
 - `get_active_locations(time_step)` → returns `(row, col)` of cells above pest threshold
 - `infer_report_location(stream_data, stream_labels)` → finds peak in pest stream → maps to field `(row, col)`
-- `score_relevance(signal, user)` → domain-specific relevance
+- `score_relevance(signal, user)` → band-aligned role relevance via `tattletots.engine.relevance`
 - `compute_costs(...)` → scouting + treatment + damage costs
 - `get_responder_user_id()` → user authorized for COP dispatch
 - `dispatch_and_judge_responses(targets, time_step)` → treatment outcomes

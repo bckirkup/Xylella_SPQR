@@ -46,6 +46,8 @@ grain-guard batch --config configs/batch_example.json
 
 ### Integrated (domain + TattleTots agent ecology + COP dispatch)
 
+COP fusion uses `adapter.score_relevance()` with band-aligned role weighting (see TattleTots `engine/relevance.py`). Requires a current TattleTots install.
+
 ```bash
 grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output integrated_results.json --verbose
 

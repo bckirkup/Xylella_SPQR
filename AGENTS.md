@@ -34,7 +34,7 @@ pytest
 ## Key Files
 | File | Purpose |
 |------|---------|
-| `src/grain_guard/adapter/grain_adapter.py` | TattleTots DomainAdapter + COP dispatch hooks |
+| `src/grain_guard/adapter/grain_adapter.py` | TattleTots DomainAdapter + COP dispatch hooks (`score_relevance` → band alignment) |
 | `src/grain_guard/runner.py` | domain-runner hooks (`GrainDomainHooks`, `run_grain_simulation`) |
 | `src/grain_guard/environment/field.py` | Grid-based crop field simulation |
 | `src/grain_guard/environment/pest.py` | Pest dynamics + resistance evolution |
