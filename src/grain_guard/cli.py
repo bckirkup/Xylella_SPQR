@@ -4,65 +4,71 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
-from grain_guard.adapter.grain_adapter import GrainGuardAdapter
-from grain_guard.environment.field import LandscapeType
+from grain_guard.runner import GrainDomainHooks, run_grain_batch, run_grain_simulation
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="GrainGuard: precision agriculture simulator")
-    parser.add_argument("--steps", type=int, default=200, help="Number of simulation steps")
-    parser.add_argument(
-        "--landscape",
-        type=str,
-        default="monoculture",
-        choices=["monoculture", "orchard", "intercrop"],
-        help="Landscape type",
+    subparsers = parser.add_subparsers(dest="command", required=False)
+
+    sim_parser = subparsers.add_parser("sim", help="Run a single simulation")
+    sim_parser.add_argument("--steps", type=int, default=200)
+    sim_parser.add_argument("--landscape", default="monoculture", choices=["monoculture", "orchard", "intercrop"])
+    sim_parser.add_argument("--rows", type=int, default=20)
+    sim_parser.add_argument("--cols", type=int, default=20)
+    sim_parser.add_argument("--seed", type=int, default=42)
+    sim_parser.add_argument("--layer", default="domain_only", choices=["domain_only", "tattletots"])
+    sim_parser.add_argument("--config", type=str)
+    sim_parser.add_argument("--output", type=Path)
+    sim_parser.add_argument("--verbose", action="store_true")
+    sim_parser.add_argument("--json", action="store_true")
+
+    batch_parser = subparsers.add_parser("batch", help="Run batch simulations")
+    batch_parser.add_argument("--config", type=str, required=True)
+    batch_parser.add_argument("--output-dir", type=Path)
+    batch_parser.add_argument("--parallel", action="store_true")
+    batch_parser.add_argument("--workers", type=int)
+    batch_parser.add_argument("--verbose", action="store_true")
+
+    effective = argv if argv is not None else []
+    if effective and effective[0] not in ("sim", "batch", "-h", "--help"):
+        effective = ["sim", *effective]
+    elif not effective:
+        effective = ["sim"]
+
+    args = parser.parse_args(effective)
+
+    if args.command == "batch":
+        run_grain_batch(
+            Path(args.config),
+            output_dir=args.output_dir,
+            parallel=args.parallel,
+            workers=args.workers,
+            verbose=args.verbose,
+        )
+        return
+
+    hooks = GrainDomainHooks()
+    run = hooks.load_run_context(
+        config_path=args.config,
+        cli_overrides={
+            "domain": {
+                "steps": args.steps,
+                "landscape": args.landscape,
+                "grid_rows": args.rows,
+                "grid_cols": args.cols,
+                "seed": args.seed,
+            },
+            "layer": args.layer,
+            "verbose": args.verbose,
+            "output": str(args.output) if args.output else None,
+        },
     )
-    parser.add_argument("--rows", type=int, default=20, help="Field grid rows")
-    parser.add_argument("--cols", type=int, default=20, help="Field grid cols")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--verbose", action="store_true", help="Print per-step status")
-    parser.add_argument("--json", action="store_true", help="Output final metrics as JSON")
-    args = parser.parse_args(argv)
-
-    landscape = LandscapeType(args.landscape)
-    adapter = GrainGuardAdapter(
-        grid_rows=args.rows,
-        grid_cols=args.cols,
-        landscape=landscape,
-        seed=args.seed,
-    )
-
-    for step in range(args.steps):
-        adapter.step(step)
-        ground_truth = adapter.get_ground_truth(step)
-        if args.verbose and step % 20 == 0:
-            field = adapter.field
-            print(
-                f"Step {step:4d} | "
-                f"Health={field.mean_crop_health():.3f} | "
-                f"Yield={field.mean_yield_potential():.3f} | "
-                f"Pests={field.total_pest_density():.1f} | "
-                f"Weeds={field.total_weed_density():.1f} | "
-                f"Event={ground_truth}"
-            )
-
-    final = {
-        "steps": args.steps,
-        "landscape": args.landscape,
-        "final_health": adapter.field.mean_crop_health(),
-        "final_yield": adapter.field.mean_yield_potential(),
-        "total_pests": adapter.field.total_pest_density(),
-        "total_weeds": adapter.field.total_weed_density(),
-    }
-
-    if args.json:
-        print(json.dumps(final, indent=2))
-    else:
-        print("\n--- Final State ---")
-        for k, v in final.items():
-            print(f"  {k}: {v}")
+    result = run_grain_simulation(run)
+    if args.json and not args.output:
+        print(json.dumps(result.to_dict(), indent=2))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ This document explains how Xylella_SPQR (GrainGuard) integrates with TattleTots 
 
 | Repository | Role | Package |
 |------------|------|---------|
+| **domain-runner** | Layer-agnostic single/batch runners | *(library)* |
 | **TattleTots** | Agent ecology engine (domain-agnostic) | `tattletots` |
 | **Coral_Key_in_Three_Hour_Epochs** | ReefWatch fishery domain adapter | `coral-key` |
 | **Xylella_SPQR** (this repo) | GrainGuard agriculture domain adapter | `grain-guard` |
@@ -29,37 +30,31 @@ class GrainGuardAdapter(DomainAdapter):
 ## Installation for Coordinated Use
 
 ```bash
-# Install TattleTots first (engine dependency)
-pip install -e /path/to/TattleTots[dev]
-
-# Install this repo
+pip install -e /path/to/domain-runner[dev]
+pip install -e /path/to/TattleTots[dev]   # only for --layer tattletots
 pip install -e ".[dev]"
-
-# Optionally install sibling domains for cross-comparison
-pip install -e /path/to/Coral_Key_in_Three_Hour_Epochs[dev]
-pip install -e /path/to/Scrapiron_and_the_Bear[dev]
 ```
 
 ## Running Modes
 
-### Standalone (domain-only, no agent ecology)
+### Domain only (no agent ecology)
 
 ```bash
-grain-guard --steps 200 --landscape monoculture --verbose --json
+grain-guard sim --layer domain_only --steps 200 --landscape monoculture --verbose --json
+grain-guard batch --config configs/batch_example.json
 ```
 
-Exercises the agricultural simulation (crop growth, pest dynamics, sensor observations) without TattleTots agents.
-
-### Integrated (domain + TattleTots agent ecology)
+### Integrated (domain + TattleTots agent ecology + COP dispatch)
 
 ```bash
+grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output integrated_results.json --verbose
+
+# Legacy
 python scripts/run_with_tattletots.py \
     --config configs/tattletots_integration.json \
     --output integrated_results.json \
     --verbose
 ```
-
-Runs the full loop: domain generates sensor streams → Tot agents compress/escalate → trust/evolution dynamics → cost accounting.
 
 ## Configuration
 

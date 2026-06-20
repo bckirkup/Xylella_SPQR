@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",
     "pydantic>=2.0",
+    "domain-runner @ git+https://github.com/bckirkup/domain-runner.git",
     "tattletots @ git+https://github.com/bckirkup/TattleTots.git",
 ]
 

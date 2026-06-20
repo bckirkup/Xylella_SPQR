@@ -119,6 +119,22 @@ class TestWorldIntegration:
         # Population should have grown from reproduction
         assert world.living_population > 10 or len(world.agents) > 10
 
+    def test_runner_tattletots_layer(self) -> None:
+        """Full loop via domain-runner + TattleTots layer (COP dispatch included)."""
+        from grain_guard.runner import GrainDomainHooks, run_grain_simulation
+
+        hooks = GrainDomainHooks()
+        run = hooks.load_run_context(
+            cli_overrides={
+                "domain": {"steps": 8, "grid_rows": 8, "grid_cols": 8},
+                "layer": "tattletots",
+                "simulation": {"initial_population": 8, "max_steps": 8, "seed": 42},
+            }
+        )
+        result = run_grain_simulation(run)
+        assert result.layer == "tattletots"
+        assert result.steps_completed == 8
+
     def test_cost_computation(self) -> None:
         """Adapter cost model should return valid dict."""
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=42)

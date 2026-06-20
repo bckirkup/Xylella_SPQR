@@ -14,11 +14,22 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: bckirkup/domain-runner
+          path: domain-runner
+      - uses: actions/checkout@v4
+        with:
+          repository: bckirkup/TattleTots
+          path: TattleTots
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e domain-runner[dev]
+          pip install -e TattleTots[dev]
+          pip install -e ".[dev]"
       - name: Lint
         run: |
           ruff check src/ tests/
@@ -27,3 +38,5 @@ jobs:
         run: mypy src/
       - name: Test
         run: pytest --strict-markers -ra
+      - name: Smoke tests
+        run: pytest -m smoke --tb=short -q

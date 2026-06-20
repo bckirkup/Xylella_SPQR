@@ -11,8 +11,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.typing import NDArray
+from tattletots.engine.response_judgment import judge_necessity
 from tattletots.interface.domain_adapter import DomainAdapter
+from tattletots.models.dispatch_target import DispatchTarget
 from tattletots.models.location import EventLocation
+from tattletots.models.report import Report
+from tattletots.models.response_outcome import ResponseOutcome
 from tattletots.models.stream import Stream, StreamType
 from tattletots.models.user import User
 
@@ -28,6 +32,9 @@ from grain_guard.users.ag_users import create_ag_users
 
 DEFAULT_ENGINE_MAX_DIM = 30
 """Default TattleTots engine per-agent input dimensionality cap."""
+
+SPRAY_EFFICACY = 0.8
+"""Default pesticide efficacy for spot-spray responses."""
 
 
 @dataclass(frozen=True)
@@ -321,6 +328,77 @@ class GrainGuardAdapter(DomainAdapter):
             + n_false_alarms * self._cost.false_alarm,
             "damage_cost": n_missed * self._cost.missed,
         }
+
+    def dispatch_spray(self, row: int, col: int) -> None:
+        """Apply spot-spray pesticide at a field cell."""
+        if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
+            return
+        self._field.pests[row][col].apply_pesticide(SPRAY_EFFICACY, self.rng)
+
+    def get_responder_user_id(self) -> str:
+        """Agronomist authorizes field spray dispatch."""
+        for user in self._users:
+            if user.name == "Agronomist":
+                return user.id
+        return self._users[0].id
+
+    def dispatch_and_judge_responses(
+        self,
+        targets: list[DispatchTarget],
+        time_step: int,
+    ) -> list[ResponseOutcome]:
+        """Spray COP-selected pest locations and judge responder necessity."""
+        outcomes: list[ResponseOutcome] = []
+        responder_id = self.get_responder_user_id()
+
+        for target in targets:
+            row, col = target.location
+            before = self._pest_severity(row, col)
+            self.dispatch_spray(row, col)
+            after = self._pest_severity(row, col)
+            dispatched = True
+
+            problem, mitigated, necessary = judge_necessity(
+                before,
+                after,
+                problem_threshold=self._pest_threshold,
+            )
+            linked_reports = target.reports or [
+                Report(
+                    agent_id="",
+                    target_user_id=responder_id,
+                    time_step=time_step,
+                    signal_vector=np.array([]),
+                    confidence=0.0,
+                    anomaly_score=0.0,
+                    location=target.location,
+                    verified=True,
+                )
+            ]
+            for report in linked_reports:
+                outcome = ResponseOutcome(
+                    agent_id=report.agent_id,
+                    responder_user_id=responder_id,
+                    time_step=time_step,
+                    location=target.location,
+                    response_type="spray",
+                    dispatched=dispatched,
+                    problem_severity_before=before,
+                    problem_severity_after=after,
+                    problem_present=problem,
+                    mitigated=mitigated,
+                    response_necessary=necessary,
+                )
+                report.response_outcome = outcome
+                outcomes.append(outcome)
+
+        return outcomes
+
+    def _pest_severity(self, row: int, col: int) -> float:
+        """Pest density at a field cell."""
+        if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
+            return 0.0
+        return float(self._field.pests[row][col].density)
 
     # ------------------------------------------------------------------
     # Internal simulation helpers

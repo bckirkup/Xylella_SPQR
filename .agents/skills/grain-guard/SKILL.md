@@ -8,7 +8,8 @@ description: Guide for developing and testing the GrainGuard domain simulation f
 ## Setup
 
 ```bash
-cd /home/ubuntu/repos/Xylella_SPQR
+pip install -e domain-runner[dev]
+pip install -e TattleTots[dev]   # only for --layer tattletots
 pip install -e ".[dev]"
 pre-commit install
 ```
@@ -16,9 +17,13 @@ pre-commit install
 ## Run Simulation
 
 ```bash
+grain-guard sim --layer domain_only --steps 200 --verbose
+grain-guard sim --layer tattletots --config configs/tattletots_integration.json
+grain-guard batch --config configs/batch_example.json
+
+# Legacy
 grain-guard --steps 200 --verbose
 grain-guard --landscape orchard --steps 100 --json
-grain-guard --landscape intercrop --steps 100 --verbose
 ```
 
 ## Validation
@@ -57,15 +62,15 @@ The adapter (`adapter/grain_adapter.py`) implements `DomainAdapter`:
 - `infer_report_location(stream_data, stream_labels)` → finds peak in pest stream → maps to field `(row, col)`
 - `score_relevance(signal, user)` → domain-specific relevance
 - `compute_costs(...)` → scouting + treatment + damage costs
+- `get_responder_user_id()` → user authorized for COP dispatch
+- `dispatch_and_judge_responses(targets, time_step)` → treatment outcomes
 
-**Note:** The integration loop uses `world.set_event_state(adapter.get_active_locations(step))` (not `set_ground_truth`). The engine verifies report correctness per-location.
+**Note:** The integration loop uses `world.set_event_state(adapter.get_active_locations(step))` (not `set_ground_truth`). Agents must not read `User.trust`.
 
 ### Running Integrated Mode
 
 ```bash
-python scripts/run_with_tattletots.py \
-    --config configs/tattletots_integration.json \
-    --output results.json --verbose
+grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output results.json --verbose
 ```
 
 Output conforms to `tattletots.output_schema.SimulationOutput` (unified JSON).

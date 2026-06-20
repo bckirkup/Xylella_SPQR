@@ -7,9 +7,12 @@ GrainGuard tests whether a self-organizing drone/sensor ecology (BMA) can manage
 ## Quick Start
 
 ```bash
+pip install -e domain-runner[dev]
 pip install -e ".[dev]"
 pre-commit install
-grain-guard --steps 200 --verbose
+
+grain-guard sim --layer domain_only --steps 200 --verbose
+grain-guard batch --config configs/batch_example.json
 ```
 
 ## Architecture
@@ -48,7 +51,14 @@ src/grain_guard/
 
 ## Integrated Mode (with TattleTots Agent Ecology)
 
-Run the full integration — domain generates sensor streams while TattleTots agents compress, escalate, evolve, and compete:
+Requires TattleTots:
+
+```bash
+pip install -e TattleTots[dev]
+grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output results.json --verbose
+```
+
+Legacy:
 
 ```bash
 python scripts/run_with_tattletots.py \

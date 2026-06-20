@@ -7,6 +7,8 @@ dynamics, competing architectures (A0-A3), and phased deployment scenarios.
 
 ## Setup
 ```bash
+pip install -e domain-runner[dev]
+pip install -e TattleTots[dev]   # only for --layer tattletots
 pip install -e ".[dev]"
 pre-commit install
 ```
@@ -32,7 +34,8 @@ pytest
 ## Key Files
 | File | Purpose |
 |------|---------|
-| `src/grain_guard/adapter/grain_adapter.py` | TattleTots DomainAdapter implementation |
+| `src/grain_guard/adapter/grain_adapter.py` | TattleTots DomainAdapter + COP dispatch hooks |
+| `src/grain_guard/runner.py` | domain-runner hooks (`GrainDomainHooks`, `run_grain_simulation`) |
 | `src/grain_guard/environment/field.py` | Grid-based crop field simulation |
 | `src/grain_guard/environment/pest.py` | Pest dynamics + resistance evolution |
 | `src/grain_guard/environment/weed.py` | Weed dynamics + herbicide resistance |

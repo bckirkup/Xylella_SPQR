@@ -44,6 +44,8 @@ class AgMetrics(BaseModel):
     total_spray_volume: float = Field(default=0.0, ge=0.0)
     total_false_sprays: float = Field(default=0.0, ge=0.0)
     total_missed_cells: float = Field(default=0.0, ge=0.0)
+    total_responses_judged_necessary: float = Field(default=0.0, ge=0.0)
+    total_responses_judged_unnecessary: float = Field(default=0.0, ge=0.0)
     resistance_trajectory: list[float] = Field(default_factory=list)
     detection_latencies: list[int] = Field(default_factory=list)
 
@@ -57,6 +59,31 @@ class AgMetrics(BaseModel):
 
     def record_detection_latency(self, latency: int) -> None:
         self.detection_latencies.append(latency)
+
+    def record_response_outcomes(
+        self,
+        *,
+        dispatched: int,
+        judged_necessary: int,
+        judged_unnecessary: int,
+    ) -> None:
+        """Record post-dispatch spray judgments for the current step."""
+        if self.history:
+            last = self.history[-1]
+            last.n_sprays = float(dispatched)
+            last.spray_volume_L = float(dispatched)
+            last.false_sprays = float(judged_unnecessary)
+        self.total_sprays += dispatched
+        self.total_spray_volume += dispatched
+        self.total_false_sprays += judged_unnecessary
+        self.total_responses_judged_necessary += judged_necessary
+        self.total_responses_judged_unnecessary += judged_unnecessary
+
+    @property
+    def unnecessary_spray_rate(self) -> float:
+        if self.total_sprays == 0:
+            return 0.0
+        return self.total_responses_judged_unnecessary / self.total_sprays
 
     @property
     def mean_detection_latency(self) -> float:
@@ -92,6 +119,9 @@ class AgMetrics(BaseModel):
             "yield_protected": self.yield_protected,
             "total_spray_volume": self.total_spray_volume,
             "false_spray_rate": self.false_spray_rate,
+            "unnecessary_spray_rate": self.unnecessary_spray_rate,
+            "total_responses_judged_necessary": self.total_responses_judged_necessary,
+            "total_responses_judged_unnecessary": self.total_responses_judged_unnecessary,
             "total_missed_cells": self.total_missed_cells,
             "final_resistance_freq": self.final_resistance,
             "mean_detection_latency": self.mean_detection_latency,

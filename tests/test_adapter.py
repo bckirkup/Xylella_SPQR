@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
+from tattletots.models.dispatch_target import DispatchTarget
+from tattletots.models.report import Report
 
 from grain_guard.adapter.grain_adapter import GrainGuardAdapter
 from grain_guard.environment.field import LandscapeType
@@ -84,3 +86,63 @@ class TestAdapterProperties:
             grid_rows=5, grid_cols=5, seed=1, resistance_initial_frequency=0.5
         )
         assert adapter.field.pests[0][0].resistance_freq == 0.5
+
+    def test_dispatch_and_judge_necessary_spray(self) -> None:
+        adapter = GrainGuardAdapter(grid_rows=10, grid_cols=10, pest_threshold=10.0)
+        adapter.field.pests[3][3].density = 20.0
+        users = adapter.get_users()
+        report = Report(
+            agent_id="agent-1",
+            target_user_id=users[0].id,
+            time_step=0,
+            signal_vector=np.ones(10),
+            confidence=0.9,
+            anomaly_score=2.0,
+            location=(3, 3),
+            verified=True,
+            correct=True,
+        )
+        outcomes = adapter.dispatch_and_judge_responses(
+            [
+                DispatchTarget(
+                    location=(3, 3),
+                    reports=[report],
+                    responder_user_id=adapter.get_responder_user_id(),
+                    cop_threat_level=2.0,
+                )
+            ],
+            0,
+        )
+        assert len(outcomes) == 1
+        assert outcomes[0].dispatched
+        assert outcomes[0].response_necessary
+
+    def test_dispatch_and_judge_unnecessary_below_threshold(self) -> None:
+        adapter = GrainGuardAdapter(grid_rows=10, grid_cols=10, pest_threshold=10.0)
+        adapter.field.pests[1][1].density = 2.0
+        users = adapter.get_users()
+        report = Report(
+            agent_id="agent-1",
+            target_user_id=users[0].id,
+            time_step=0,
+            signal_vector=np.ones(10),
+            confidence=0.9,
+            anomaly_score=2.0,
+            location=(1, 1),
+            verified=True,
+            correct=True,
+        )
+        outcomes = adapter.dispatch_and_judge_responses(
+            [
+                DispatchTarget(
+                    location=(1, 1),
+                    reports=[report],
+                    responder_user_id=adapter.get_responder_user_id(),
+                    cop_threat_level=2.0,
+                )
+            ],
+            0,
+        )
+        assert len(outcomes) == 1
+        assert outcomes[0].dispatched
+        assert not outcomes[0].response_necessary
