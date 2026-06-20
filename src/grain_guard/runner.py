@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from domain_runner.batch import run_batch as execute_batch
 from domain_runner.config import deep_merge, load_json
-from domain_runner.layer import DomainOnlyLayer
+from domain_runner.layer import DomainOnlyLayer, SimulationLayer
 from domain_runner.single import print_result_summary, run_simulation_timed
 from domain_runner.types import RunContext, SimulationResult
 
@@ -116,7 +116,7 @@ class GrainDomainHooks:
             json.dump(result.to_dict(), f, indent=2)
 
 
-def resolve_layer(name: str):
+def resolve_layer(name: str) -> SimulationLayer:
     if name in ("domain_only", "domain", "none"):
         return DomainOnlyLayer()
     if name in ("tattletots", "tots"):
@@ -164,12 +164,15 @@ def run_grain_batch_entry(
 def run_grain_batch(batch_config_path: Path, **kwargs: Any) -> dict[str, Any]:
     batch = load_json(batch_config_path)
     out = Path(kwargs.get("output_dir") or batch.get("output_directory", "batch_results"))
-    return execute_batch(
-        batch,
-        run_grain_batch_entry,
-        output_dir=out,
-        default_config={"domain": dict(_DEFAULT_DOMAIN)},
-        parallel=bool(kwargs.get("parallel")),
-        workers=kwargs.get("workers"),
-        verbose=bool(kwargs.get("verbose")),
+    return cast(
+        dict[str, Any],
+        execute_batch(
+            batch,
+            run_grain_batch_entry,
+            output_dir=out,
+            default_config={"domain": dict(_DEFAULT_DOMAIN)},
+            parallel=bool(kwargs.get("parallel")),
+            workers=kwargs.get("workers"),
+            verbose=bool(kwargs.get("verbose")),
+        ),
     )
