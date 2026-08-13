@@ -63,7 +63,7 @@ def _build_fresh_field(config: ComparisonConfig, rng: np.random.Generator) -> Cr
     )
     field.stochastic_pest_introduction(rng, probability=config.pest_intro_probability)
 
-    if config.pest_density_boost != 1.0:
+    if not np.isclose(config.pest_density_boost, 1.0, rtol=0.0, atol=0.0):
         for r in range(field.rows):
             for c in range(field.cols):
                 field.pests[r][c].density *= config.pest_density_boost
@@ -73,7 +73,7 @@ def _build_fresh_field(config: ComparisonConfig, rng: np.random.Generator) -> Cr
             for c in range(field.cols):
                 field.weeds[r][c].density += config.weed_density_base
 
-    if config.resistance_initial_frequency != 0.01:
+    if not np.isclose(config.resistance_initial_frequency, 0.01, rtol=0.0, atol=0.0):
         for r in range(field.rows):
             for c in range(field.cols):
                 field.pests[r][c].resistance_freq = config.resistance_initial_frequency

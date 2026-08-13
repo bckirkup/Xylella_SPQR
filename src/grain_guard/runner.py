@@ -66,23 +66,33 @@ class GrainDomainHooks:
             seed=int(domain_config.get("seed", 42)),
         )
 
-    def print_header(self, adapter: GrainGuardAdapter, run: RunContext) -> None:
+    def print_header(self, _adapter: GrainGuardAdapter, run: RunContext) -> None:
         print(f"=== GrainGuard ({run.layer}) ===")
         print(
             f"  Steps: {run.steps}, Landscape: {run.domain_config.get('landscape')}, Seed: {run.seed}"
         )
         print()
 
-    def on_step(self, adapter: GrainGuardAdapter, step: int, layer_events: dict[str, Any]) -> None:
+    def on_step(
+        self,
+        _adapter: GrainGuardAdapter,
+        _step: int,
+        _layer_events: dict[str, Any],
+    ) -> None:
         return
 
     def should_stop(
-        self, adapter: GrainGuardAdapter, step: int, layer_events: dict[str, Any]
+        self, _adapter: GrainGuardAdapter, _step: int, layer_events: dict[str, Any]
     ) -> bool:
         return bool(layer_events.get("stop"))
 
     def print_step(
-        self, adapter: GrainGuardAdapter, step: int, layer_events: dict[str, Any], *, verbose: bool
+        self,
+        adapter: GrainGuardAdapter,
+        step: int,
+        _layer_events: dict[str, Any],
+        *,
+        verbose: bool,
     ) -> None:
         if verbose and step % 50 == 0:
             field = adapter.field

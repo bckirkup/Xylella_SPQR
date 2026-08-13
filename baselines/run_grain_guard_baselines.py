@@ -23,6 +23,7 @@ from typing import Any
 from grain_guard.comparison import ComparisonConfig, run_comparison
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPT_DIR.parent
 for _parent in [_SCRIPT_DIR, *_SCRIPT_DIR.parents]:
     _large_experiments = _parent / "TattleTots" / "Large Experiments"
     if (_large_experiments / "baseline_parallel.py").is_file():
@@ -34,7 +35,88 @@ else:
         "    Ensure all repos are cloned as siblings under a common workspace root."
     )
 
-from baseline_parallel import resolve_worker_count, run_process_pool
+from baseline_parallel import resolve_worker_count, run_process_pool  # noqa: E402
+
+
+def _safe_path_under_base(raw: str | Path, base: Path = _REPO_ROOT) -> Path:
+    """Resolve a CLI path and require it to remain inside the repository."""
+    base_dir = base.resolve()
+    candidate = Path(raw)
+    resolved = (candidate if candidate.is_absolute() else base_dir / candidate).resolve()
+    if not resolved.is_relative_to(base_dir):
+        raise ValueError(f"Path escapes allowed directory: {raw}")
+    return resolved
+
+
+def _factor_grid(
+    smoke_test: bool,
+    factors: dict[str, Any],
+) -> dict[str, list[Any]]:
+    if smoke_test:
+        return {
+            "landscape": ["monoculture"],
+            "pest_pressure": ["medium"],
+            "weed_pressure": ["medium"],
+            "resistance_initial_frequency": [0.01],
+        }
+    return {
+        "landscape": factors.get("landscape", ["monoculture"]),
+        "pest_pressure": factors.get("pest_pressure", ["medium"]),
+        "weed_pressure": factors.get("weed_pressure", ["medium"]),
+        "resistance_initial_frequency": factors.get("resistance_initial_frequency", [0.01]),
+    }
+
+
+def _build_runs(
+    factor_grid: dict[str, list[Any]],
+    seeds: list[int],
+    steps: int,
+    grid_rows: int,
+    grid_cols: int,
+    pest_map: dict[str, Any],
+    weed_map: dict[str, Any],
+) -> list[dict[str, Any]]:
+    factor_names = list(factor_grid.keys())
+    factor_values = [factor_grid[name] for name in factor_names]
+    runs: list[dict[str, Any]] = []
+    for combo in itertools.product(*factor_values):
+        combo_dict = dict(zip(factor_names, combo, strict=True))
+        landscape = combo_dict["landscape"]
+        pest_level = combo_dict["pest_pressure"]
+        weed_level = combo_dict["weed_pressure"]
+        resistance = float(combo_dict["resistance_initial_frequency"])
+        pest_params = pest_map[pest_level]
+        weed_params = weed_map[weed_level]
+        pest_intro = float(pest_params["intro_probability"])
+        pest_boost = float(pest_params["density_boost"])
+        weed_base = float(weed_params["density_base"])
+        res_tag = f"{resistance:.2f}".replace(".", "p")
+        for seed in seeds:
+            run_name = (
+                f"gg_baselines_{landscape}_pest{pest_level}_weed{weed_level}"
+                f"_res{res_tag}_s{seed}"
+            )
+            runs.append(
+                {
+                    "name": run_name,
+                    "steps": steps,
+                    "seed": seed,
+                    "landscape": landscape,
+                    "grid_rows": grid_rows,
+                    "grid_cols": grid_cols,
+                    "pest_intro_probability": pest_intro,
+                    "pest_density_boost": pest_boost,
+                    "weed_density_base": weed_base,
+                    "resistance_initial_frequency": resistance,
+                    "metadata": {
+                        "landscape": landscape,
+                        "pest_pressure": pest_level,
+                        "weed_pressure": weed_level,
+                        "resistance_initial_frequency": resistance,
+                    },
+                }
+            )
+    return runs
 
 
 def run_single_simulation(
@@ -104,11 +186,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not args.config.exists():
+    config_path = _safe_path_under_base(args.config)
+    if not config_path.exists():
         print(f"[-] Error: Config file not found at {args.config}")
         return 1
 
-    with open(args.config) as f:
+    with open(config_path) as f:
         config_data = json.load(f)
 
     output_dir_name = (
@@ -116,7 +199,7 @@ def main() -> int:
         if args.smoke_test
         else config_data.get("output_directory", "grain_guard_baselines_results")
     )
-    output_dir = Path(output_dir_name).resolve()
+    output_dir = _safe_path_under_base(output_dir_name)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     steps = 5 if args.smoke_test else config_data.get("steps", 800)
@@ -133,64 +216,16 @@ def main() -> int:
         {"medium": {"density_base": 2.0}},
     )
 
-    if args.smoke_test:
-        factor_grid = {
-            "landscape": ["monoculture"],
-            "pest_pressure": ["medium"],
-            "weed_pressure": ["medium"],
-            "resistance_initial_frequency": [0.01],
-        }
-    else:
-        factor_grid = {
-            "landscape": factors.get("landscape", ["monoculture"]),
-            "pest_pressure": factors.get("pest_pressure", ["medium"]),
-            "weed_pressure": factors.get("weed_pressure", ["medium"]),
-            "resistance_initial_frequency": factors.get("resistance_initial_frequency", [0.01]),
-        }
-
-    factor_names = list(factor_grid.keys())
-    factor_values = [factor_grid[name] for name in factor_names]
-
-    runs_to_execute: list[dict[str, Any]] = []
-    for combo in itertools.product(*factor_values):
-        combo_dict = dict(zip(factor_names, combo, strict=True))
-        landscape = combo_dict["landscape"]
-        pest_level = combo_dict["pest_pressure"]
-        weed_level = combo_dict["weed_pressure"]
-        resistance = float(combo_dict["resistance_initial_frequency"])
-
-        pest_params = pest_map[pest_level]
-        weed_params = weed_map[weed_level]
-        pest_intro = float(pest_params["intro_probability"])
-        pest_boost = float(pest_params["density_boost"])
-        weed_base = float(weed_params["density_base"])
-
-        res_tag = f"{resistance:.2f}".replace(".", "p")
-        for seed in seeds:
-            run_name = (
-                f"gg_baselines_{landscape}_pest{pest_level}_weed{weed_level}"
-                f"_res{res_tag}_s{seed}"
-            )
-            runs_to_execute.append(
-                {
-                    "name": run_name,
-                    "steps": steps,
-                    "seed": seed,
-                    "landscape": landscape,
-                    "grid_rows": grid_rows,
-                    "grid_cols": grid_cols,
-                    "pest_intro_probability": pest_intro,
-                    "pest_density_boost": pest_boost,
-                    "weed_density_base": weed_base,
-                    "resistance_initial_frequency": resistance,
-                    "metadata": {
-                        "landscape": landscape,
-                        "pest_pressure": pest_level,
-                        "weed_pressure": weed_level,
-                        "resistance_initial_frequency": resistance,
-                    },
-                }
-            )
+    factor_grid = _factor_grid(args.smoke_test, factors)
+    runs_to_execute = _build_runs(
+        factor_grid,
+        seeds,
+        steps,
+        grid_rows,
+        grid_cols,
+        pest_map,
+        weed_map,
+    )
 
     n_jobs = len(runs_to_execute)
     worker_count = resolve_worker_count(args.workers, n_jobs)

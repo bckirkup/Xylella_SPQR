@@ -146,7 +146,7 @@ class GrainGuardAdapter(DomainAdapter):
 
     def _apply_resistance_frequency(self, frequency: float) -> None:
         """Set initial herbicide resistance frequency across the field."""
-        if frequency == 0.01:
+        if np.isclose(frequency, 0.01, rtol=0.0, atol=0.0):
             return
         for r in range(self._field.rows):
             for c in range(self._field.cols):

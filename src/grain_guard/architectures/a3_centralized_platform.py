@@ -46,41 +46,11 @@ class CentralizedPlatform(Architecture):
 
         for r in range(field.rows):
             for c in range(field.cols):
-                pest = field.pests[r][c]
-                weed = field.weeds[r][c]
-                crop = field.crops[r][c]
-                bio_density = field.biological_control[r * field.cols + c]
-
-                eil = self._compute_eil(crop, pest, bio_density)
-                economic_threshold = 0.75 * eil
-
-                treat_pest = pest.density > economic_threshold
-                treat_weed = weed.density > self.weed_threshold
-
-                actual_pest_problem = pest.density > economic_threshold
-                actual_weed_problem = weed.density > self.weed_threshold
-
-                if treat_pest and weather.is_spray_safe:
-                    reduced_efficacy = self.spray_efficacy * (
-                        1.0 - self.biocontrol_weight * min(bio_density / 20.0, 1.0)
-                    )
-                    n_sprays += 1.0
-                    spray_volume += 1.0
-                    pest.apply_pesticide(max(0.1, reduced_efficacy), self.rng)
-                    if not actual_pest_problem:
-                        false_sprays += 1.0
-
-                if treat_weed and weather.is_spray_safe:
-                    n_sprays += 1.0
-                    spray_volume += 0.5
-                    weed.apply_herbicide(self.spray_efficacy, self.rng)
-                    if not actual_weed_problem:
-                        false_sprays += 1.0
-
-                if actual_pest_problem and not treat_pest:
-                    missed += 1.0
-                if actual_weed_problem and not treat_weed:
-                    missed += 1.0
+                cell = self._process_cell(field, weather, r, c)
+                n_sprays += cell[0]
+                spray_volume += cell[1]
+                false_sprays += cell[2]
+                missed += cell[3]
 
         return {
             "n_sprays": n_sprays,
@@ -89,7 +59,49 @@ class CentralizedPlatform(Architecture):
             "missed_cells": missed,
         }
 
-    def _compute_eil(self, crop: CropCell, pest: PestPopulation, bio_density: float) -> float:
+    def _process_cell(
+        self, field: CropField, weather: AgWeather, row: int, col: int
+    ) -> tuple[float, float, float, float]:
+        pest = field.pests[row][col]
+        weed = field.weeds[row][col]
+        crop = field.crops[row][col]
+        bio_density = field.biological_control[row * field.cols + col]
+
+        eil = self._compute_eil(crop, pest, bio_density)
+        economic_threshold = 0.75 * eil
+        treat_pest = pest.density > economic_threshold
+        treat_weed = weed.density > self.weed_threshold
+        actual_pest_problem = pest.density > economic_threshold
+        actual_weed_problem = weed.density > self.weed_threshold
+        n_sprays = 0.0
+        spray_volume = 0.0
+        false_sprays = 0.0
+        missed = 0.0
+
+        if treat_pest and weather.is_spray_safe:
+            reduced_efficacy = self.spray_efficacy * (
+                1.0 - self.biocontrol_weight * min(bio_density / 20.0, 1.0)
+            )
+            n_sprays += 1.0
+            spray_volume += 1.0
+            pest.apply_pesticide(max(0.1, reduced_efficacy), self.rng)
+            if not actual_pest_problem:
+                false_sprays += 1.0
+
+        if treat_weed and weather.is_spray_safe:
+            n_sprays += 1.0
+            spray_volume += 0.5
+            weed.apply_herbicide(self.spray_efficacy, self.rng)
+            if not actual_weed_problem:
+                false_sprays += 1.0
+
+        if actual_pest_problem and not treat_pest:
+            missed += 1.0
+        if actual_weed_problem and not treat_weed:
+            missed += 1.0
+        return n_sprays, spray_volume, false_sprays, missed
+
+    def _compute_eil(self, crop: CropCell, _pest: PestPopulation, bio_density: float) -> float:
         """Compute Economic Injury Level (spec §3.3).
 
         Uses a practical formulation: base threshold scaled by crop value
@@ -103,4 +115,4 @@ class CentralizedPlatform(Architecture):
         return self.pest_threshold * (1.0 + bio_suppression) / vulnerability
 
     def reset(self) -> None:
-        pass
+        pass  # Stateless architecture; reset is required by the shared interface.
