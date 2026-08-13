@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from grain_guard.architectures.base import Architecture
+from grain_guard.architectures.base import Architecture, SprayMetrics
 from grain_guard.environment.field import CropField
 from grain_guard.environment.weather import AgWeather
 
@@ -48,10 +48,10 @@ class PrescriptionDrone(Architecture):
         for r in range(field.rows):
             for c in range(field.cols):
                 cell = self._process_cell(field, weather, r, c)
-                n_sprays += cell[0]
-                spray_volume += cell[1]
-                false_sprays += cell[2]
-                missed += cell[3]
+                n_sprays += cell.sprays
+                spray_volume += cell.volume
+                false_sprays += cell.false_sprays
+                missed += cell.missed
 
         return {
             "n_sprays": n_sprays,
@@ -62,7 +62,7 @@ class PrescriptionDrone(Architecture):
 
     def _process_cell(
         self, field: CropField, weather: AgWeather, row: int, col: int
-    ) -> tuple[float, float, float, float]:
+    ) -> SprayMetrics:
         prescribed = self._prescription_map.get((row, col), False)
         actual_pest = field.pests[row][col].density > 10.0
         actual_weed = field.weeds[row][col].density > 5.0
@@ -83,7 +83,7 @@ class PrescriptionDrone(Architecture):
                 false_sprays += 1.0
         elif actual_problem:
             missed += 1.0
-        return n_sprays, spray_volume, false_sprays, missed
+        return SprayMetrics(n_sprays, spray_volume, false_sprays, missed)
 
     def _update_prescription(self, field: CropField) -> None:
         """Generate prescription map from NDVI anomaly detection.
