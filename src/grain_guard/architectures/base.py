@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import NamedTuple
 
 from grain_guard.environment.field import CropField
 from grain_guard.environment.weather import AgWeather
+
+
+class SprayMetrics(NamedTuple):
+    """Per-cell management metrics accumulated by an architecture step."""
+
+    sprays: float
+    volume: float
+    false_sprays: float
+    missed: float
 
 
 class Architecture(ABC):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from grain_guard.architectures.base import Architecture
+from grain_guard.architectures.base import Architecture, SprayMetrics
 from grain_guard.environment.field import CropField
 from grain_guard.environment.weather import AgWeather
 
@@ -51,33 +51,11 @@ class AITractor(Architecture):
 
         for r in range(field.rows):
             for c in range(field.cols):
-                weed = field.weeds[r][c]
-                pest = field.pests[r][c]
-
-                weed_detected = weed.detectability > self.weed_threshold
-                pest_detected = pest.density * pest.detectability > self.pest_threshold
-
-                actual_weed = weed.density > 5.0
-                actual_pest = pest.density > self.pest_threshold
-
-                if weed_detected and weather.is_spray_safe:
-                    n_sprays += 1.0
-                    spray_volume += 0.5
-                    weed.apply_herbicide(self.spray_efficacy, self.rng)
-                    if not actual_weed:
-                        false_sprays += 1.0
-
-                if pest_detected and weather.is_spray_safe:
-                    n_sprays += 1.0
-                    spray_volume += 1.0
-                    pest.apply_pesticide(self.spray_efficacy, self.rng)
-                    if not actual_pest:
-                        false_sprays += 1.0
-
-                if actual_pest and not pest_detected:
-                    missed += 1.0
-                if actual_weed and not weed_detected:
-                    missed += 1.0
+                cell = self._process_cell(field, weather, r, c)
+                n_sprays += cell.sprays
+                spray_volume += cell.volume
+                false_sprays += cell.false_sprays
+                missed += cell.missed
 
         return {
             "n_sprays": n_sprays,
@@ -86,5 +64,41 @@ class AITractor(Architecture):
             "missed_cells": missed,
         }
 
+    def _process_cell(
+        self, field: CropField, weather: AgWeather, row: int, col: int
+    ) -> SprayMetrics:
+        weed = field.weeds[row][col]
+        pest = field.pests[row][col]
+
+        weed_detected = weed.detectability > self.weed_threshold
+        pest_detected = pest.density * pest.detectability > self.pest_threshold
+
+        actual_weed = weed.density > 5.0
+        actual_pest = pest.density > self.pest_threshold
+        n_sprays = 0.0
+        spray_volume = 0.0
+        false_sprays = 0.0
+        missed = 0.0
+
+        if weed_detected and weather.is_spray_safe:
+            n_sprays += 1.0
+            spray_volume += 0.5
+            weed.apply_herbicide(self.spray_efficacy, self.rng)
+            if not actual_weed:
+                false_sprays += 1.0
+
+        if pest_detected and weather.is_spray_safe:
+            n_sprays += 1.0
+            spray_volume += 1.0
+            pest.apply_pesticide(self.spray_efficacy, self.rng)
+            if not actual_pest:
+                false_sprays += 1.0
+
+        if actual_pest and not pest_detected:
+            missed += 1.0
+        if actual_weed and not weed_detected:
+            missed += 1.0
+        return SprayMetrics(n_sprays, spray_volume, false_sprays, missed)
+
     def reset(self) -> None:
-        pass
+        pass  # Stateless architecture; reset is required by the shared interface.

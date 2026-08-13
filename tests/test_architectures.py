@@ -13,7 +13,7 @@ from grain_guard.environment.field import CropField
 from grain_guard.environment.weather import AgWeather
 
 
-@pytest.fixture()
+@pytest.fixture
 def field_with_pests() -> CropField:
     rng = np.random.default_rng(42)
     f = CropField(rows=10, cols=10)
@@ -23,7 +23,7 @@ def field_with_pests() -> CropField:
     return f
 
 
-@pytest.fixture()
+@pytest.fixture
 def weather() -> AgWeather:
     return AgWeather(temperature=25.0, wind_speed=3.0, precipitation=0.0)
 
