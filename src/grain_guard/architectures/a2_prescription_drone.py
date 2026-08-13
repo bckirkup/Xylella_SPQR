@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from grain_guard.architectures.base import Architecture, SprayMetrics
+from grain_guard.architectures.base import Architecture, SprayMetrics, apply_treatment
 from grain_guard.environment.field import CropField
 from grain_guard.environment.weather import AgWeather
 
@@ -67,23 +67,36 @@ class PrescriptionDrone(Architecture):
         actual_pest = field.pests[row][col].density > 10.0
         actual_weed = field.weeds[row][col].density > 5.0
         actual_problem = actual_pest or actual_weed
-        n_sprays = 0.0
-        spray_volume = 0.0
-        false_sprays = 0.0
         missed = 0.0
 
-        if prescribed and weather.is_spray_safe:
-            n_sprays += 1.0
-            spray_volume += 1.5
-            if actual_pest:
-                field.pests[row][col].apply_pesticide(self.spray_efficacy, self.rng)
-            if actual_weed:
-                field.weeds[row][col].apply_herbicide(self.spray_efficacy, self.rng)
-            if not actual_problem:
-                false_sprays += 1.0
-        elif actual_problem:
+        should_treat = prescribed and weather.is_spray_safe
+        treatment = apply_treatment(
+            should_treat=should_treat,
+            volume=1.5,
+            actual_problem=actual_problem,
+            application=lambda: self._apply_prescription(field, row, col, actual_pest, actual_weed),
+        )
+        if actual_problem and not should_treat:
             missed += 1.0
-        return SprayMetrics(n_sprays, spray_volume, false_sprays, missed)
+        return SprayMetrics(
+            treatment.sprays,
+            treatment.volume,
+            treatment.false_sprays,
+            missed,
+        )
+
+    def _apply_prescription(
+        self,
+        field: CropField,
+        row: int,
+        col: int,
+        actual_pest: bool,
+        actual_weed: bool,
+    ) -> None:
+        if actual_pest:
+            field.pests[row][col].apply_pesticide(self.spray_efficacy, self.rng)
+        if actual_weed:
+            field.weeds[row][col].apply_herbicide(self.spray_efficacy, self.rng)
 
     def _update_prescription(self, field: CropField) -> None:
         """Generate prescription map from NDVI anomaly detection.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from grain_guard.architectures.base import Architecture, SprayMetrics
+from grain_guard.architectures.base import Architecture, SprayMetrics, apply_treatment
 from grain_guard.environment.crop import CropCell
 from grain_guard.environment.field import CropField
 from grain_guard.environment.pest import PestPopulation
@@ -73,33 +73,38 @@ class CentralizedPlatform(Architecture):
         treat_weed = weed.density > self.weed_threshold
         actual_pest_problem = pest.density > economic_threshold
         actual_weed_problem = weed.density > self.weed_threshold
-        n_sprays = 0.0
-        spray_volume = 0.0
-        false_sprays = 0.0
         missed = 0.0
 
-        if treat_pest and weather.is_spray_safe:
-            reduced_efficacy = self.spray_efficacy * (
-                1.0 - self.biocontrol_weight * min(bio_density / 20.0, 1.0)
-            )
-            n_sprays += 1.0
-            spray_volume += 1.0
-            pest.apply_pesticide(max(0.1, reduced_efficacy), self.rng)
-            if not actual_pest_problem:
-                false_sprays += 1.0
-
-        if treat_weed and weather.is_spray_safe:
-            n_sprays += 1.0
-            spray_volume += 0.5
-            weed.apply_herbicide(self.spray_efficacy, self.rng)
-            if not actual_weed_problem:
-                false_sprays += 1.0
+        pest_metrics = apply_treatment(
+            should_treat=treat_pest and weather.is_spray_safe,
+            volume=1.0,
+            actual_problem=actual_pest_problem,
+            application=lambda: pest.apply_pesticide(
+                max(
+                    0.1,
+                    self.spray_efficacy
+                    * (1.0 - self.biocontrol_weight * min(bio_density / 20.0, 1.0)),
+                ),
+                self.rng,
+            ),
+        )
+        weed_metrics = apply_treatment(
+            should_treat=treat_weed and weather.is_spray_safe,
+            volume=0.5,
+            actual_problem=actual_weed_problem,
+            application=lambda: weed.apply_herbicide(self.spray_efficacy, self.rng),
+        )
 
         if actual_pest_problem and not treat_pest:
             missed += 1.0
         if actual_weed_problem and not treat_weed:
             missed += 1.0
-        return SprayMetrics(n_sprays, spray_volume, false_sprays, missed)
+        return SprayMetrics(
+            pest_metrics.sprays + weed_metrics.sprays,
+            pest_metrics.volume + weed_metrics.volume,
+            pest_metrics.false_sprays + weed_metrics.false_sprays,
+            missed,
+        )
 
     def _compute_eil(self, crop: CropCell, _pest: PestPopulation, bio_density: float) -> float:
         """Compute Economic Injury Level (spec §3.3).

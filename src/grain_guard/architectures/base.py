@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import NamedTuple
 
 from grain_guard.environment.field import CropField
@@ -16,6 +17,20 @@ class SprayMetrics(NamedTuple):
     volume: float
     false_sprays: float
     missed: float
+
+
+def apply_treatment(
+    *,
+    should_treat: bool,
+    volume: float,
+    actual_problem: bool,
+    application: Callable[[], object],
+) -> SprayMetrics:
+    """Apply one treatment and return its associated spray metrics."""
+    if not should_treat:
+        return SprayMetrics(0.0, 0.0, 0.0, 0.0)
+    application()
+    return SprayMetrics(1.0, volume, float(not actual_problem), 0.0)
 
 
 class Architecture(ABC):
