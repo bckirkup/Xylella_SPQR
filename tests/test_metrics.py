@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from grain_guard.metrics.ag_metrics import AgMetrics, StepMetrics
 
 
@@ -17,8 +19,8 @@ class TestAgMetrics:
             mean_resistance_freq=0.05,
         )
         m.record_step(sm)
-        assert m.total_sprays == 5.0
-        assert m.total_spray_volume == 10.0
+        assert m.total_sprays == pytest.approx(5.0, rel=0.0, abs=1e-12)
+        assert m.total_spray_volume == pytest.approx(10.0, rel=0.0, abs=1e-12)
         assert len(m.resistance_trajectory) == 1
 
     def test_false_spray_rate(self) -> None:
@@ -36,7 +38,7 @@ class TestAgMetrics:
         m.record_step(
             StepMetrics(time_step=0, surveillance_cost=1.0, response_cost=2.0, damage_cost=3.0)
         )
-        assert m.total_cost == 6.0
+        assert m.total_cost == pytest.approx(6.0, rel=0.0, abs=1e-12)
 
     def test_summary_keys(self) -> None:
         m = AgMetrics()
@@ -51,4 +53,4 @@ class TestAgMetrics:
         m = AgMetrics()
         m.record_detection_latency(3)
         m.record_detection_latency(5)
-        assert m.mean_detection_latency == 4.0
+        assert m.mean_detection_latency == pytest.approx(4.0, rel=0.0, abs=1e-12)

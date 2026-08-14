@@ -3,5 +3,29 @@ repos:
     rev: v0.4.4
     hooks:
       - id: ruff
-        args: [--fix]
+        args: [--fix, "--config=lint.mccabe.max-complexity=15"]
       - id: ruff-format
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy src/
+        language: system
+        pass_filenames: false
+      - id: sonar-mechanical-guards
+        name: Sonar mechanical guards
+        entry: python scripts/sonar_guard.py
+        language: system
+        files: ^(src|tests|scripts|baselines)/.*\.py$
+        types: [python]
+      - id: sonar-workflow-guards
+        name: Sonar workflow guards
+        entry: python scripts/sonar_guard.py --workflows
+        language: system
+        files: ^\.github/workflows/.*\.(yml|yaml)$
+        types: [yaml]
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.29.0
+    hooks:
+      - id: zizmor
+        args: [--no-progress]

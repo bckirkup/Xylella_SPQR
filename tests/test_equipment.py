@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from grain_guard.equipment.body_plan import BodyPlan, BodyPlanType
 from grain_guard.equipment.equipment_genome import EquipmentGenome
@@ -25,7 +26,7 @@ class TestBodyPlan:
         bp = BodyPlan.ai_tractor()
         assert bp.plan_type == BodyPlanType.AI_TRACTOR
         assert bp.can_treat
-        assert bp.tank_liters == 500.0
+        assert bp.tank_liters == pytest.approx(500.0, rel=0.0, abs=1e-12)
 
     def test_trap_robot(self) -> None:
         bp = BodyPlan.trap_robot()

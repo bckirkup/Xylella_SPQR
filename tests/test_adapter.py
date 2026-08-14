@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from tattletots.interface.adapter_conformance import assert_adapter_conformance
 from tattletots.models.dispatch_target import DispatchTarget
 from tattletots.models.report import Report
@@ -89,14 +90,20 @@ class TestGrainGuardAdapter:
         first = adapter.get_streams()[4].metadata
         adapter.step(1)
         second = adapter.get_streams()[4].metadata
-        assert first is not None and second is not None
+        assert first is not None
+        assert second is not None
         assert first.coordinates != second.coordinates
 
     def test_yield_monitor_is_explicitly_missing_before_harvest(self) -> None:
         adapter = GrainGuardAdapter(seed=42)
         adapter.step(0)
         assert np.all(adapter.get_streams()[5].current_status == "missing")
-        assert np.all(adapter.get_streams()[5].current_data == 0.0)
+        np.testing.assert_allclose(
+            adapter.get_streams()[5].current_data,
+            0.0,
+            rtol=0.0,
+            atol=1e-12,
+        )
 
     def test_ground_truth_bool(self) -> None:
         adapter = GrainGuardAdapter()
@@ -188,7 +195,8 @@ class TestGrainGuardAdapter:
         assert drone.metadata is not None
         adapter.step(0)
         coordinates = drone.metadata.coordinates
-        assert coordinates is not None and coordinates[0] is not None
+        assert coordinates is not None
+        assert coordinates[0] is not None
         expected = (int(round(coordinates[0][0])), int(round(coordinates[0][1])))
         assert (
             adapter.infer_report_location(
@@ -264,7 +272,11 @@ class TestAdapterProperties:
         adapter = GrainGuardAdapter(
             grid_rows=5, grid_cols=5, seed=1, resistance_initial_frequency=0.5
         )
-        assert adapter.field.pests[0][0].resistance_freq == 0.5
+        assert adapter.field.pests[0][0].resistance_freq == pytest.approx(
+            0.5,
+            rel=0.0,
+            abs=1e-12,
+        )
 
     def test_dispatch_and_judge_necessary_spray(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=10, grid_cols=10, pest_threshold=10.0)

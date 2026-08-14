@@ -27,7 +27,11 @@ def main(argv: list[str] | None = None) -> int:
             "layer": "tattletots",
             "verbose": args.verbose,
             "domain": {"steps": args.steps, "seed": args.seed},
-            "simulation": {"initial_population": args.population, "max_steps": args.steps, "seed": args.seed},
+            "simulation": {
+                "initial_population": args.population,
+                "max_steps": args.steps,
+                "seed": args.seed,
+            },
             "output": str(args.output) if args.output else None,
         },
     )
