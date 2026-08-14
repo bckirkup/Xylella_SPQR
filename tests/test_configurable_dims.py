@@ -134,15 +134,15 @@ class TestStreamBudget:
 
     def test_budget_default_engine_cap(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=1)
-        assert adapter.stream_budget().engine_max_dim == 30
+        assert adapter.stream_budget().engine_max_dim == DEFAULT_ENGINE_MAX_DIM
 
     def test_budget_custom_engine_cap(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, engine_max_dim=50, seed=1)
         assert adapter.stream_budget().engine_max_dim == 50
 
     def test_budget_flags_truncation(self) -> None:
-        """Default 5×5 satellite (75 floats) exceeds 30-dim cap."""
-        adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=1)
+        """A 5×5 satellite exceeds an explicitly smaller engine cap."""
+        adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, engine_max_dim=30, seed=1)
         budget = adapter.stream_budget()
         assert budget.any_truncated
         sat = budget.streams[0]
@@ -179,7 +179,7 @@ class TestTruncationWarning:
     def test_warning_on_default_satellite(self) -> None:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=1)
+            GrainGuardAdapter(grid_rows=8, grid_cols=8, engine_max_dim=30, seed=1)
         truncation_warnings = [x for x in w if "truncated" in str(x.message).lower()]
         assert len(truncation_warnings) >= 1
         assert "satellite_indices" in str(truncation_warnings[0].message)
@@ -209,6 +209,7 @@ class TestTruncationWarning:
                 satellite_zone_rows=1,
                 satellite_zone_cols=1,
                 n_traps=20,
+                engine_max_dim=30,
                 seed=1,
             )
         truncation_warnings = [x for x in w if "truncated" in str(x.message).lower()]

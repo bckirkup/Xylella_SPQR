@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
+from tattletots.engine.config import SimulationConfig
+from tattletots.engine.sensing import prepare_agent_input
 from tattletots.interface.adapter_conformance import assert_adapter_conformance
+from tattletots.models.agent import Agent, AgentState
 from tattletots.models.dispatch_target import DispatchTarget
+from tattletots.models.genome import Genome, SensingStrategy
 from tattletots.models.report import Report
 
 from grain_guard.adapter.grain_adapter import GrainGuardAdapter
@@ -30,6 +36,25 @@ class TestGrainGuardAdapter:
         adapter.step(0)
         for s in adapter.get_streams():
             assert s.current_data.size > 0
+
+    def test_satellite_vector_reaches_agent_at_configured_cap(self) -> None:
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            adapter = GrainGuardAdapter(seed=42)
+        assert not captured
+        adapter.step(0)
+        satellite = adapter.get_streams()[0]
+        agent = Agent(
+            genome=Genome(sensing_strategy=SensingStrategy.CONCAT, working_dim=75),
+            state=AgentState(input_stream_ids=[satellite.id]),
+        )
+        delivered, _ = prepare_agent_input(
+            agent,
+            {satellite.id: satellite},
+            SimulationConfig(max_stream_dim=75),
+        )
+        assert satellite.dimensionality == 75
+        assert delivered.size == satellite.dimensionality
 
     def test_streams_publish_static_geometry_and_statuses(self) -> None:
         adapter = GrainGuardAdapter()
@@ -220,6 +245,7 @@ class TestGrainGuardAdapter:
             steps=20,
             state_independence_factory=factory,
             strict_state_independence=True,
+            config=SimulationConfig(max_stream_dim=75),
         )
 
     def test_score_relevance(self) -> None:

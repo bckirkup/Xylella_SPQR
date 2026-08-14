@@ -36,10 +36,21 @@
     {
       "stream": "satellite_indices",
       "declared_dimensionality": 75,
-      "engine_cap": 30,
-      "agent_visible_dimensionality": 30,
-      "unreachable_declared_indices": "30-74",
-      "description": "The engine silently truncates this stream to 30 floats before agents see it. Conformance decoder round-trip still passes because it feeds full-length vectors directly to the decoder rather than engine-truncated vectors."
+      "engine_cap": 75,
+      "agent_visible_dimensionality": 75,
+      "unreachable_declared_indices": "none",
+      "description": "The cap was 30, silently truncating this stream so declared indices 30-74 reached no agent. The cap is now 75 and the TattleTots conformance suite checks declared counts against the deliverable ceiling.",
+      "cap_effect_measurement": {
+        "layer": "tattletots",
+        "landscape": "monoculture",
+        "steps": 800,
+        "seeds": "42-46",
+        "precision_mean_cap30": 0.4715,
+        "precision_mean_cap75": 0.4423,
+        "static_prior_mean_cap30": 0.6331,
+        "static_prior_mean_cap75": 0.6624,
+        "note": "Raising the cap did not improve agent-level precision, and all ten runs were flagged initiation_is_degenerate for precision_not_above_static_prior. The change is contract honesty, not a performance improvement."
+      }
     },
     {
       "stream": "drone_imagery",
