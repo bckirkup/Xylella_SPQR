@@ -130,7 +130,7 @@ class TestStreamBudget:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=1)
         budget = adapter.stream_budget()
         assert budget.total_dim == sum(s.dimensionality for s in budget.streams)
-        assert len(budget.streams) == 4
+        assert len(budget.streams) == 6
 
     def test_budget_default_engine_cap(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=1)

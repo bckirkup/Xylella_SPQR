@@ -49,8 +49,8 @@ class TestWorldIntegration:
     def test_streams_registered(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=42)
         world = _make_world(adapter)
-        # 4 raw streams + 10 residual streams from agents
-        assert len([s for s in world.streams.values() if s.stream_type.value == "raw"]) == 4
+        # 6 raw streams + 10 residual streams from agents
+        assert len([s for s in world.streams.values() if s.stream_type.value == "raw"]) == 6
 
     def test_users_registered(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=42)
