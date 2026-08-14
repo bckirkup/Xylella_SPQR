@@ -15,6 +15,7 @@ from tattletots.engine.response_judgment import judge_necessity
 from tattletots.interface.domain_adapter import DomainAdapter
 from tattletots.models.dispatch_target import DispatchTarget
 from tattletots.models.location import EventLocation
+from tattletots.models.observation import ObservationStatus, StreamMetadata
 from tattletots.models.report import Report
 from tattletots.models.response_outcome import ResponseOutcome
 from tattletots.models.stream import Stream, StreamType
@@ -205,26 +206,130 @@ class GrainGuardAdapter(DomainAdapter):
                 dimensionality=sat_dim,
                 label="satellite_indices",
                 current_data=np.zeros(sat_dim),
+                metadata=self._satellite_metadata(),
             ),
             Stream(
                 stream_type=StreamType.RAW,
                 dimensionality=trap_dim,
                 label="pheromone_traps",
                 current_data=np.zeros(trap_dim),
+                metadata=self._trap_metadata(),
             ),
             Stream(
                 stream_type=StreamType.RAW,
                 dimensionality=weather_dim,
                 label="weather_observations",
                 current_data=np.zeros(weather_dim),
+                metadata=self._weather_metadata(),
             ),
             Stream(
                 stream_type=StreamType.RAW,
                 dimensionality=soil_dim,
                 label="soil_moisture",
                 current_data=np.zeros(soil_dim),
+                metadata=self._soil_metadata(),
             ),
         ]
+
+    def _satellite_metadata(self) -> StreamMetadata:
+        """Declare static zone geometry and dynamic revisit coordinates."""
+        coordinates: list[tuple[float, ...] | None] = []
+        footprints: list[tuple[float, ...] | None] = []
+        resolutions: list[float | None] = []
+        for zone_row, zone_col in self._zone_indices():
+            (row, col), footprint = self._zone_geometry(zone_row, zone_col)
+            for _ in range(3):
+                coordinates.append((row, col))
+                footprints.append(footprint)
+                resolutions.append(float(max(footprint)))
+        return StreamMetadata(
+            coordinates=coordinates,
+            sensor_coordinates=list(coordinates),
+            modality=["ndvi", "ndre", "chlorophyll"] * (len(coordinates) // 3),
+            identity=[None] * len(coordinates),
+            footprints=footprints,
+            resolution=resolutions,
+        )
+
+    def _trap_metadata(self) -> StreamMetadata:
+        """Declare fixed point geometry for each trap feature block."""
+        coordinates = [
+            (float(trap.row), float(trap.col))
+            for trap in self._traps
+            for _ in range(trap.output_dim)
+        ]
+        return StreamMetadata(
+            coordinates=list(coordinates),
+            sensor_coordinates=list(coordinates),
+            modality=["catch_count", "resistance_proxy"] * len(self._traps),
+            identity=[None] * len(coordinates),
+            footprints=[(0.0, 0.0)] * len(coordinates),
+            resolution=[0.0] * len(coordinates),
+        )
+
+    def _weather_metadata(self) -> StreamMetadata:
+        """Declare fixed point geometry for each weather feature block."""
+        coordinates = [
+            (float(station.row), float(station.col))
+            for station in self._weather_stations
+            for _ in range(station.output_dim)
+        ]
+        modalities: list[str | None] = [
+            "temperature",
+            "humidity",
+            "wind_speed",
+            "wind_direction",
+            "precipitation",
+        ]
+        return StreamMetadata(
+            coordinates=list(coordinates),
+            sensor_coordinates=list(coordinates),
+            modality=modalities * len(self._weather_stations),
+            identity=[None] * len(coordinates),
+            footprints=[(0.0, 0.0)] * len(coordinates),
+            resolution=[0.0] * len(coordinates),
+        )
+
+    def _soil_metadata(self) -> StreamMetadata:
+        """Declare fixed point geometry for each soil feature block."""
+        coordinates = [
+            (float(sensor.row), float(sensor.col))
+            for sensor in self._soil_sensors
+            for _ in range(sensor.output_dim)
+        ]
+        return StreamMetadata(
+            coordinates=list(coordinates),
+            sensor_coordinates=list(coordinates),
+            modality=["moisture", "temperature_proxy", "conductivity_proxy"]
+            * len(self._soil_sensors),
+            identity=[None] * len(coordinates),
+            footprints=[(0.0, 0.0)] * len(coordinates),
+            resolution=[0.0] * len(coordinates),
+        )
+
+    def _zone_indices(self) -> list[tuple[int, int]]:
+        return [
+            (zone_row, zone_col)
+            for zone_row in range(self._satellite.zone_rows)
+            for zone_col in range(self._satellite.zone_cols)
+        ]
+
+    def _zone_geometry(
+        self, zone_row: int, zone_col: int
+    ) -> tuple[tuple[float, float], tuple[float, float]]:
+        row_start = zone_row * self._field.rows // self._satellite.zone_rows
+        row_end = (zone_row + 1) * self._field.rows // self._satellite.zone_rows
+        col_start = zone_col * self._field.cols // self._satellite.zone_cols
+        col_end = (zone_col + 1) * self._field.cols // self._satellite.zone_cols
+        height = max(row_end - row_start, 1)
+        width = max(col_end - col_start, 1)
+        return (
+            (
+                float(row_start + (height - 1) / 2.0),
+                float(col_start + (width - 1) / 2.0),
+            ),
+            (float(height), float(width)),
+        )
 
     def _warn_on_truncation(self) -> None:
         """Emit warnings for streams whose dimensionality exceeds the engine cap."""
@@ -278,6 +383,10 @@ class GrainGuardAdapter(DomainAdapter):
     def get_users(self) -> list[User]:
         return self._users
 
+    def get_location_frame(self) -> tuple[tuple[int, int], tuple[int, int]]:
+        """Return the inclusive CropField coordinate frame."""
+        return ((0, 0), (self._field.rows - 1, self._field.cols - 1))
+
     def step(self, time_step: int) -> None:
         """Advance agricultural simulation and update all sensor streams."""
         self._current_step = time_step
@@ -299,16 +408,31 @@ class GrainGuardAdapter(DomainAdapter):
         stream_data: list[NDArray[np.float64]],
         stream_labels: list[str],
     ) -> EventLocation:
-        """Infer report location from pest density stream peak."""
+        """Infer report location from a peak and its declared sensor geometry."""
+        streams_by_label = {stream.label: stream for stream in self._streams}
+        candidates: list[tuple[int, NDArray[np.float64], StreamMetadata]] = []
         for data, label in zip(stream_data, stream_labels, strict=False):
-            if "pest" in label and data.size > 0:
-                peak_idx = int(np.argmax(data))
-                cols = self._field.cols
-                return (peak_idx // cols, peak_idx % cols)
-        if stream_data and stream_data[0].size > 0:
-            peak_idx = int(np.argmax(np.abs(stream_data[0])))
-            cols = self._field.cols
-            return (peak_idx // cols, peak_idx % cols)
+            stream = streams_by_label.get(label)
+            if stream is None or data.size == 0 or stream.metadata is None:
+                continue
+            sensor_coordinates = stream.metadata.sensor_coordinates
+            if sensor_coordinates is None or not any(
+                coordinate is not None for coordinate in sensor_coordinates
+            ):
+                continue
+            priority = 0 if ("pest" in label or "trap" in label) else 1
+            candidates.append((priority, data, stream.metadata))
+
+        if not candidates:
+            return (0, 0)
+
+        _, data, metadata = min(candidates, key=lambda candidate: candidate[0])
+        peak_idx = int(np.argmax(np.abs(data)))
+        sensor_coordinates = metadata.sensor_coordinates
+        if sensor_coordinates is not None and peak_idx < len(sensor_coordinates):
+            coordinate = sensor_coordinates[peak_idx]
+            if coordinate is not None:
+                return (int(round(coordinate[0])), int(round(coordinate[1])))
         return (0, 0)
 
     def score_relevance(self, signal_vector: NDArray[np.float64], user: User) -> float:
@@ -423,22 +547,69 @@ class GrainGuardAdapter(DomainAdapter):
     def _update_streams(self, time_step: int) -> None:
         """Populate stream data from sensor outputs."""
         sat_obs = self._satellite.observe(self._field.crops, time_step, self.rng)
+        satellite_stream = self._streams[0]
+        satellite_metadata = satellite_stream.metadata
+        if satellite_metadata is None or satellite_metadata.sensor_coordinates is None:
+            raise RuntimeError("satellite metadata must declare static sensor coordinates")
         if sat_obs is not None:
-            self._streams[0].update(sat_obs)
+            satellite_stream.metadata = satellite_metadata.model_copy(
+                update={"coordinates": list(satellite_metadata.sensor_coordinates)}
+            )
+            satellite_stream.update(
+                sat_obs,
+                np.full(
+                    satellite_stream.dimensionality,
+                    ObservationStatus.OBSERVED.value,
+                    dtype="<U8",
+                ),
+            )
+        else:
+            satellite_stream.metadata = satellite_metadata.model_copy(
+                update={"coordinates": [None] * satellite_stream.dimensionality}
+            )
+            satellite_stream.update(
+                satellite_stream.current_data.copy(),
+                np.full(
+                    satellite_stream.dimensionality,
+                    ObservationStatus.MISSING.value,
+                    dtype="<U8",
+                ),
+            )
 
         trap_parts = [
             trap.observe(self._field.pests[trap.row][trap.col], time_step, self.rng)
             for trap in self._traps
         ]
-        self._streams[1].update(np.concatenate(trap_parts))
+        self._streams[1].update(
+            np.concatenate(trap_parts),
+            np.full(
+                self._streams[1].dimensionality,
+                ObservationStatus.OBSERVED.value,
+                dtype="<U8",
+            ),
+        )
 
         weather_parts = [ws.observe(self._weather, self.rng) for ws in self._weather_stations]
-        self._streams[2].update(np.concatenate(weather_parts))
+        self._streams[2].update(
+            np.concatenate(weather_parts),
+            np.full(
+                self._streams[2].dimensionality,
+                ObservationStatus.OBSERVED.value,
+                dtype="<U8",
+            ),
+        )
 
         soil_parts = [
             ss.observe(self._field.crops[ss.row][ss.col], self.rng) for ss in self._soil_sensors
         ]
-        self._streams[3].update(np.concatenate(soil_parts))
+        self._streams[3].update(
+            np.concatenate(soil_parts),
+            np.full(
+                self._streams[3].dimensionality,
+                ObservationStatus.OBSERVED.value,
+                dtype="<U8",
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Public accessors
