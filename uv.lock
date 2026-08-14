@@ -1117,7 +1117,7 @@ wheels = [
 [[package]]
 name = "tattletots"
 version = "0.1.0"
-source = { git = "https://github.com/bckirkup/TattleTots.git#2d324fbe3866bbbda2a0d89fabe39e6967b563df" }
+source = { git = "https://github.com/bckirkup/TattleTots.git#cee59f93f6973fa7fefb2f87dbb40a8ce0095113" }
 dependencies = [
     { name = "domain-runner" },
     { name = "networkx" },
