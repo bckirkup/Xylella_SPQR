@@ -1,19 +1,75 @@
 {
-  "valid": true,
-  "before": {
-    "inferability_precision": 0.0,
-    "decoder_precision": 0.579,
-    "static_prior_baseline": 0.692
+  "baseline": {
+    "label": "post-#17",
+    "grain_rev": "4a1dd6f",
+    "seeds": 20,
+    "seed_range": "42-61",
+    "steps": 200,
+    "decoder_mean": 0.8814122440024426,
+    "decoder_sd": 0.05684290422923492,
+    "inferability_mean": 0.9460881076356146,
+    "static_prior_mean": 0.6978124211191152
   },
   "after": {
-    "inferability_precision": 0.9347826086956522,
-    "decoder_precision": 0.9202898550724637,
-    "static_prior_baseline": 0.6884057971014492
+    "label": "drone-yield branch",
+    "grain_rev": "8e82a05",
+    "seeds": 20,
+    "seed_range": "42-61",
+    "steps": 200,
+    "decoder_mean": 0.8863816298878062,
+    "decoder_sd": 0.03769104306177918,
+    "inferability_mean": 0.9603142235121003,
+    "static_prior_mean": 0.6907621962607753
   },
-  "steps": 200,
-  "notes": [
-    "Drone imagery is scheduled geography-only event-detection evidence.",
-    "Yield monitoring is maturity-gated contextual evidence and is explicitly missing off cadence.",
-    "The local static-prior reference is 0.692; measured after value is 0.688406."
+  "historical_context": {
+    "pre_17_decoder_precision": 0.579,
+    "note": "0.579 is the pre-#17 decoder result, not the baseline for this comparison."
+  },
+  "interpretation": {
+    "decoder_seeds_better": 12,
+    "decoder_seeds_worse": 8,
+    "summary": "Publishing drone imagery and yield monitoring is neutral-to-slightly-positive on localization over 20 seeds.",
+    "single_seed_fragility": "Seed 42 moves from 0.954887 to 0.920290 because the new sensor calls consume RNG draws and shift the trajectory; a single seed would tell the opposite story.",
+    "static_prior_note": "The static-prior localization null remains approximately 0.69 in both conditions."
+  },
+  "known_limitations": [
+    {
+      "stream": "satellite_indices",
+      "declared_dimensionality": 75,
+      "engine_cap": 30,
+      "agent_visible_dimensionality": 30,
+      "unreachable_declared_indices": "30-74",
+      "description": "The engine silently truncates this stream to 30 floats before agents see it. Conformance decoder round-trip still passes because it feeds full-length vectors directly to the decoder rather than engine-truncated vectors."
+    },
+    {
+      "stream": "drone_imagery",
+      "description": "This branch publishes the previously constructed DroneImager and calls it on a deterministic geography-only flight plan."
+    },
+    {
+      "stream": "yield_monitor",
+      "description": "This branch publishes the previously constructed YieldMonitor, with maturity-gated observations explicitly marked missing off cadence."
+    }
+  ],
+  "rows": [
+    {"seed": 42, "decoder": 0.9548872180451128, "inferability": 0.9699248120300752, "static_prior": 0.6917293233082706, "event_steps": 133, "after_decoder": 0.9202898550724637, "after_inferability": 0.9347826086956522, "after_static_prior": 0.6884057971014492, "after_event_steps": 138},
+    {"seed": 43, "decoder": 0.9558823529411765, "inferability": 0.9558823529411765, "static_prior": 0.7058823529411765, "event_steps": 136, "after_decoder": 0.9064748201438849, "after_inferability": 0.9424460431654677, "after_static_prior": 0.6834532374100719, "after_event_steps": 139},
+    {"seed": 44, "decoder": 0.8705035971223022, "inferability": 0.9064748201438849, "static_prior": 0.6690647482014388, "event_steps": 139, "after_decoder": 0.8962962962962963, "after_inferability": 0.9407407407407408, "after_static_prior": 0.6814814814814815, "after_event_steps": 135},
+    {"seed": 45, "decoder": 0.9612403100775194, "inferability": 0.9689922480620154, "static_prior": 0.7209302325581395, "event_steps": 129, "after_decoder": 0.8656716417910447, "after_inferability": 0.9925373134328358, "after_static_prior": 0.7014925373134329, "after_event_steps": 134},
+    {"seed": 46, "decoder": 0.9398496240601504, "inferability": 0.9473684210526315, "static_prior": 0.7368421052631579, "event_steps": 133, "after_decoder": 0.9333333333333333, "after_inferability": 0.9555555555555556, "after_static_prior": 0.6814814814814815, "after_event_steps": 135},
+    {"seed": 47, "decoder": 0.9104477611940298, "inferability": 0.9328358208955224, "static_prior": 0.7164179104477612, "event_steps": 134, "after_decoder": 0.9064748201438849, "after_inferability": 0.9424460431654677, "after_static_prior": 0.6906474820143885, "after_event_steps": 139},
+    {"seed": 48, "decoder": 0.8613138686131386, "inferability": 0.927007299270073, "static_prior": 0.6861313868613139, "event_steps": 137, "after_decoder": 0.9230769230769231, "after_inferability": 0.9769230769230769, "after_static_prior": 0.7, "after_event_steps": 130},
+    {"seed": 49, "decoder": 0.8666666666666667, "inferability": 0.9185185185185185, "static_prior": 0.6962962962962963, "event_steps": 135, "after_decoder": 0.9090909090909091, "after_inferability": 0.9621212121212122, "after_static_prior": 0.7121212121212122, "after_event_steps": 132},
+    {"seed": 50, "decoder": 0.9407407407407408, "inferability": 0.9629629629629629, "static_prior": 0.6888888888888889, "event_steps": 135, "after_decoder": 0.8881118881118881, "after_inferability": 0.951048951048951, "after_static_prior": 0.6713286713286714, "after_event_steps": 143},
+    {"seed": 51, "decoder": 0.762962962962963, "inferability": 0.9333333333333333, "static_prior": 0.6888888888888889, "event_steps": 135, "after_decoder": 0.8244274809160306, "after_inferability": 0.9847328244274809, "after_static_prior": 0.7175572519083969, "after_event_steps": 131},
+    {"seed": 52, "decoder": 0.9389312977099237, "inferability": 0.9618320610687023, "static_prior": 0.7099236641221374, "event_steps": 131, "after_decoder": 0.9117647058823529, "after_inferability": 0.9338235294117647, "after_static_prior": 0.6838235294117647, "after_event_steps": 136},
+    {"seed": 53, "decoder": 0.8787878787878788, "inferability": 0.9242424242424242, "static_prior": 0.7348484848484849, "event_steps": 132, "after_decoder": 0.9185185185185185, "after_inferability": 0.9703703703703703, "after_static_prior": 0.6888888888888889, "after_event_steps": 135},
+    {"seed": 54, "decoder": 0.8686131386861314, "inferability": 0.9343065693430657, "static_prior": 0.6934306569343066, "event_steps": 137, "after_decoder": 0.8939393939393939, "after_inferability": 0.9848484848484849, "after_static_prior": 0.7045454545454546, "after_event_steps": 132},
+    {"seed": 55, "decoder": 0.8, "inferability": 0.9357142857142857, "static_prior": 0.6714285714285714, "event_steps": 140, "after_decoder": 0.8057553956834532, "after_inferability": 0.935251798561151, "after_static_prior": 0.6546762589928058, "after_event_steps": 139},
+    {"seed": 56, "decoder": 0.8484848484848485, "inferability": 0.9545454545454546, "static_prior": 0.7196969696969697, "event_steps": 132, "after_decoder": 0.8518518518518519, "after_inferability": 1.0, "after_static_prior": 0.7037037037037037, "after_event_steps": 135},
+    {"seed": 57, "decoder": 0.8787878787878788, "inferability": 0.9772727272727273, "static_prior": 0.6893939393939394, "event_steps": 132, "after_decoder": 0.8652482269503546, "after_inferability": 0.9361702127659575, "after_static_prior": 0.6666666666666666, "after_event_steps": 141},
+    {"seed": 58, "decoder": 0.8161764705882353, "inferability": 0.9264705882352942, "static_prior": 0.6911764705882353, "event_steps": 136, "after_decoder": 0.8235294117647058, "after_inferability": 1.0, "after_static_prior": 0.7132352941176471, "after_event_steps": 136},
+    {"seed": 59, "decoder": 0.8439716312056738, "inferability": 0.9290780141843972, "static_prior": 0.6595744680851063, "event_steps": 141, "after_decoder": 0.900709219858156, "after_inferability": 0.9219858156028369, "after_static_prior": 0.6737588652482269, "after_event_steps": 141},
+    {"seed": 60, "decoder": 0.8195488721804511, "inferability": 0.9699248120300752, "static_prior": 0.6842105263157895, "event_steps": 133, "after_decoder": 0.8560606060606061, "after_inferability": 0.9696969696969697, "after_static_prior": 0.7045454545454546, "after_event_steps": 132},
+    {"seed": 61, "decoder": 0.9104477611940298, "inferability": 0.9850746268656716, "static_prior": 0.7014925373134329, "event_steps": 134, "after_decoder": 0.927007299270073, "after_inferability": 0.9708029197080292, "after_static_prior": 0.6934306569343066, "after_event_steps": 137}
   ]
 }

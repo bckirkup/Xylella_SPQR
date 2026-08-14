@@ -41,25 +41,37 @@ geometry, footprints, and statuses remain identical at the same steps.
 
 ## Instrument measurements
 
-All measurements use a fresh default adapter and `validate_instrument(adapter,
-steps=200)`.
+The comparison below uses 20 seeds (42–61), 200 steps per seed, and the same
+TattleTots build. The baseline is the post-#17 Grain adapter at commit
+`4a1dd6f`; the after result is this branch. The earlier `0.579` decoder
+precision was the pre-#17 result and is retained only as historical context.
 
-| Metric | Before contract/decoder work | After |
+| Metric | Post-#17 baseline (`4a1dd6f`) | Drone + yield branch |
 | --- | ---: | ---: |
-| Valid | No | **Yes** |
-| Inferability precision | 0.000 | **0.934783** |
-| Decoder precision | 0.579 | **0.920290** |
-| Static-prior precision | 0.692 | **0.688406** |
-| Uniform chance | 0.100 | **0.002500** |
-| Candidate locations | 10 | **400** |
+| Decoder precision (mean) | 0.8814 (SD 0.0568) | 0.8864 (SD 0.0377) |
+| Inferability precision (mean) | 0.9461 | 0.9603 |
+| Static-prior null (mean) | 0.6978 | 0.6908 |
 
-The decoder precision movement from 0.579 to 0.954887 is attributable to the
-sensor-owned trap and satellite geometry mapping; metadata declarations do
-not affect decoder execution. The final static-prior value remains the
-localization competence null, while uniform chance is the inferability null.
-The high support precision reflects the measured event window's broad active
-regions, not inflated declarations: only 10 trap cells and 25 satellite zone
-centroids are published, with honest zone footprints.
+The pre-#17 decoder precision was `0.579`; it is not the baseline for this
+branch. Relative to the post-#17 baseline, publishing drone imagery and yield
+monitoring is neutral-to-slightly-positive on localization: decoder precision
+increases from `0.8814` to `0.8864`, and inferability increases from `0.9461`
+to `0.9603`, while the static-prior null remains approximately `0.69`.
+Twelve seeds improved in decoder precision and eight worsened. The seed-42
+single-seed comparison goes from `0.9549` to `0.9203` and would tell the
+opposite story; the new sensor calls consume RNG draws and shift the
+trajectory, so single-seed results are fragile and should not be quoted from
+this file.
+
+The conformance decoder round-trip has a known coverage limitation:
+`satellite_indices` has dimensionality 75 while the TattleTots engine cap is
+30, so the stream is silently truncated to 30 floats before agents see it.
+Declared satellite feature indices 30–74 therefore never reach any agent.
+The conformance decoder round-trip still passes because it feeds full-length
+vectors directly to the adapter decoder rather than the truncated vectors
+delivered by the engine. This branch resolves the separate omission where
+`DroneImager` and `YieldMonitor` were constructed but never called or
+published; it does not change the cap or this suite limitation.
 
 Final validator findings:
 
@@ -67,8 +79,8 @@ Final validator findings:
   variation.
 - `coordinate_frame`: passed — ground-truth and report locations stay within
   the declared frame.
-- `baseline`: passed — static-prior precision is 69.17% versus uniform
-  precision 0.25%.
+- `baseline`: passed — static-prior precision remains approximately 69% and
+  serves as the localization competence null.
 - `localization`: passed — localization is non-vacuous across multiple event
   locations.
 - `inferability`: passed — published evidence carries event locations above
@@ -77,3 +89,28 @@ Final validator findings:
   are consistent.
 
 This result is a contract measurement, not a designed-reporter result.
+
+## Per-seed measurements
+
+| Seed | Baseline decoder | After decoder | Baseline inferability | After inferability | Baseline static prior | After static prior |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 0.954887 | 0.920290 | 0.969925 | 0.934783 | 0.691729 | 0.688406 |
+| 43 | 0.955882 | 0.906475 | 0.955882 | 0.942446 | 0.705882 | 0.683453 |
+| 44 | 0.870504 | 0.896296 | 0.906475 | 0.940741 | 0.669065 | 0.681481 |
+| 45 | 0.961240 | 0.865672 | 0.968992 | 0.992537 | 0.720930 | 0.701493 |
+| 46 | 0.939850 | 0.933333 | 0.947368 | 0.955556 | 0.736842 | 0.681481 |
+| 47 | 0.910448 | 0.906475 | 0.932836 | 0.942446 | 0.716418 | 0.690647 |
+| 48 | 0.861314 | 0.923077 | 0.927007 | 0.976923 | 0.686131 | 0.700000 |
+| 49 | 0.866667 | 0.909091 | 0.918519 | 0.962121 | 0.696296 | 0.712121 |
+| 50 | 0.940741 | 0.888112 | 0.962963 | 0.951049 | 0.688889 | 0.671329 |
+| 51 | 0.762963 | 0.824427 | 0.933333 | 0.984733 | 0.688889 | 0.717557 |
+| 52 | 0.938931 | 0.911765 | 0.961832 | 0.933824 | 0.709924 | 0.683824 |
+| 53 | 0.878788 | 0.918519 | 0.924242 | 0.970370 | 0.734848 | 0.688889 |
+| 54 | 0.868613 | 0.893939 | 0.934307 | 0.984848 | 0.693431 | 0.704545 |
+| 55 | 0.800000 | 0.805755 | 0.935714 | 0.935252 | 0.671429 | 0.654676 |
+| 56 | 0.848485 | 0.851852 | 0.954545 | 1.000000 | 0.719697 | 0.703704 |
+| 57 | 0.878788 | 0.865248 | 0.977273 | 0.936170 | 0.689394 | 0.666667 |
+| 58 | 0.816176 | 0.823529 | 0.926471 | 1.000000 | 0.691176 | 0.713235 |
+| 59 | 0.843972 | 0.900709 | 0.929078 | 0.921986 | 0.659574 | 0.673759 |
+| 60 | 0.819549 | 0.856061 | 0.969925 | 0.969697 | 0.684211 | 0.704545 |
+| 61 | 0.910448 | 0.927007 | 0.985075 | 0.970803 | 0.701493 | 0.693431 |
