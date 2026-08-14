@@ -65,3 +65,58 @@ Do not add `# noqa`, `nosonar`, or equivalent suppressions. Fix unused parameter
 naming, complexity, and oversized signatures at their causes. Taint-analysis
 findings require review in the SonarQube Cloud job because local Ruff and the
 mechanical guard cannot prove inter-procedural data flow.
+
+## Validating the guards before copying this template to another repo
+
+After copying this template or editing `scripts/sonar_guard.py`,
+`.pre-commit-config.yaml`, or `.github/workflows/ci.yml`, prove that the guards reject
+bad code and stay quiet on good code. Plant one defect at a time and run it through
+the real hook path; a direct script invocation alone does not prove the hook is wired.
+Use a scratch branch and never push it:
+
+```bash
+git checkout -b scratch/guard-validation origin/main
+# plant one defect, then:
+git add <file> && git commit -m scratch   # must be refused, naming the rule ID
+git reset --hard origin/main              # discard; never push a scratch branch
+```
+
+The workflow guard checks `run:` installer commands, while zizmor checks `uses:`
+action pinning. Both hooks are required; dropping either leaves a whole class
+unguarded.
+
+### Generating workflow probes without fooling yourself
+
+Do not build probe YAML with `sed` or hand-written quoting. A `run:` value containing
+`:all:` or nested quotes can produce invalid YAML, causing zizmor to report
+`failed to parse input` and making the guard tokenize a mangled command. Emit probe
+fixtures with a YAML dumper and assert that the parsed `run` string equals the
+intended command before trusting the result.
+
+### Known guard blind spots
+
+The Python rules are deliberately conservative, so a clean local guard is necessary
+but not sufficient:
+
+- `assert value == _expected_threshold()` remains a SonarCloud-side catch. The guard
+  does not infer helper return types or perform inter-procedural type analysis.
+- Runtime types are not inferred across attributes, subscripts, module scope, or
+  function boundaries. A simple local float binding such as
+  `expected = 0.5; assert value == expected` is covered only when that function has
+  one unambiguous float assignment to the name; conflicting or dynamic assignments
+  stay silent.
+- `S9073` is only applied to test files (`tests/` in the path, `test_*.py`, or
+  `*_test.py`). Nested `and` expressions inside an assertion are reported once per
+  assertion.
+
+Rely on the `SonarQube Cloud` CI job for these blind spots and for findings requiring
+type or data-flow inference.
+
+### UV command spelling
+
+`uvx --from pkg==version` without `--no-build` is correctly reported as `S8541`.
+The compliant form is:
+
+```text
+uvx --no-build --from pkg==version ...
+```

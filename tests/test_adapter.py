@@ -66,9 +66,11 @@ class TestGrainGuardAdapter:
         assert satellite.metadata.sensor_coordinates is not None
         assert all(coordinate is not None for coordinate in satellite.metadata.sensor_coordinates)
         assert satellite.metadata.footprints is not None
+        assert all(footprint is not None for footprint in satellite.metadata.footprints)
         assert all(
-            footprint is not None and footprint[0] > 1.0
+            footprint[0] > 1.0
             for footprint in satellite.metadata.footprints
+            if footprint is not None
         )
         assert traps.metadata is not None
         assert traps.metadata.sensor_coordinates is not None

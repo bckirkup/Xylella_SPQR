@@ -57,6 +57,65 @@ def _float_literal(node: ast.AST) -> bool:
     return False
 
 
+def _binding_kind(node: ast.AST) -> str:
+    return "float" if _float_literal(node) else "other"
+
+
+def _record_binding(bindings: dict[str, list[str]], target: ast.AST, kind: str) -> None:
+    if isinstance(target, ast.Name):
+        bindings.setdefault(target.id, []).append(kind)
+
+
+def _local_nodes(node: ast.AST) -> list[ast.AST]:
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+        return []
+    nodes = [node]
+    for child in ast.iter_child_nodes(node):
+        nodes.extend(_local_nodes(child))
+    return nodes
+
+
+def _record_argument_bindings(assignments: dict[str, list[str]], arguments: ast.arguments) -> None:
+    for argument in (
+        *arguments.posonlyargs,
+        *arguments.args,
+        *arguments.kwonlyargs,
+    ):
+        assignments.setdefault(argument.arg, []).append("other")
+    if arguments.vararg is not None:
+        assignments.setdefault(arguments.vararg.arg, []).append("other")
+    if arguments.kwarg is not None:
+        assignments.setdefault(arguments.kwarg.arg, []).append("other")
+
+
+def _record_local_binding(assignments: dict[str, list[str]], node: ast.AST) -> None:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            _record_binding(assignments, target, _binding_kind(node.value))
+    elif isinstance(node, ast.AnnAssign):
+        kind = _binding_kind(node.value) if node.value is not None else "other"
+        _record_binding(assignments, node.target, kind)
+    elif isinstance(node, ast.AugAssign | ast.For | ast.AsyncFor):
+        _record_binding(assignments, node.target, "other")
+    elif isinstance(node, ast.With | ast.AsyncWith):
+        for item in node.items:
+            if item.optional_vars is not None:
+                _record_binding(assignments, item.optional_vars, "other")
+    elif isinstance(node, ast.ExceptHandler) and node.name is not None:
+        assignments.setdefault(node.name, []).append("other")
+    elif isinstance(node, ast.NamedExpr):
+        _record_binding(assignments, node.target, _binding_kind(node.value))
+
+
+def _local_float_bindings(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    assignments: dict[str, list[str]] = {}
+    _record_argument_bindings(assignments, node.args)
+    for statement in node.body:
+        for child in _local_nodes(statement):
+            _record_local_binding(assignments, child)
+    return {name for name, kinds in assignments.items() if len(kinds) == 1 and kinds[0] == "float"}
+
+
 def _approx_call(node: ast.AST) -> bool:
     return (
         isinstance(node, ast.Call)
@@ -65,29 +124,50 @@ def _approx_call(node: ast.AST) -> bool:
     )
 
 
+def _assertion_float_finding(node: ast.Assert, path: Path, bindings: set[str]) -> Finding | None:
+    for comparison in ast.walk(node.test):
+        if not isinstance(comparison, ast.Compare):
+            continue
+        if not any(isinstance(op, ast.Eq | ast.NotEq) for op in comparison.ops):
+            continue
+        operands = [comparison.left, *comparison.comparators]
+        if any(
+            _float_literal(operand) or isinstance(operand, ast.Name) and operand.id in bindings
+            for operand in operands
+        ) and not any(_approx_call(operand) for operand in operands):
+            return Finding(
+                path,
+                comparison.lineno,
+                "S1244",
+                "float equality in assert; use pytest.approx",
+            )
+    return None
+
+
+def _walk_assertions(
+    node: ast.AST, path: Path, bindings: set[str], findings: list[Finding]
+) -> None:
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        local_bindings = _local_float_bindings(node)
+        for statement in node.body:
+            _walk_assertions(statement, path, local_bindings, findings)
+        return
+    if isinstance(node, ast.ClassDef):
+        for statement in node.body:
+            _walk_assertions(statement, path, set(), findings)
+        return
+    if isinstance(node, ast.Assert):
+        finding = _assertion_float_finding(node, path, bindings)
+        if finding is not None:
+            findings.append(finding)
+        return
+    for child in ast.iter_child_nodes(node):
+        _walk_assertions(child, path, bindings, findings)
+
+
 def _assert_float_comparisons(tree: ast.AST, path: Path) -> list[Finding]:
     findings: list[Finding] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assert):
-            continue
-        for comparison in ast.walk(node.test):
-            if not isinstance(comparison, ast.Compare):
-                continue
-            if not any(isinstance(op, ast.Eq | ast.NotEq) for op in comparison.ops):
-                continue
-            operands = [comparison.left, *comparison.comparators]
-            if any(_float_literal(operand) for operand in operands) and not any(
-                _approx_call(operand) for operand in operands
-            ):
-                findings.append(
-                    Finding(
-                        path,
-                        comparison.lineno,
-                        "S1244",
-                        "float equality in assert; use pytest.approx",
-                    )
-                )
-                break
+    _walk_assertions(tree, path, set(), findings)
     return findings
 
 
@@ -106,10 +186,9 @@ def _relative_path(path: Path) -> Path:
 def _composite_assertions(tree: ast.AST, path: Path) -> list[Finding]:
     findings: list[Finding] = []
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Assert)
-            and isinstance(node.test, ast.BoolOp)
-            and isinstance(node.test.op, ast.And)
+        if isinstance(node, ast.Assert) and any(
+            isinstance(child, ast.BoolOp) and isinstance(child.op, ast.And)
+            for child in ast.walk(node.test)
         ):
             findings.append(
                 Finding(
