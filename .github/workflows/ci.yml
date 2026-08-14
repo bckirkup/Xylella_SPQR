@@ -26,11 +26,11 @@ jobs:
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
       - name: Ruff lint
-        run: uv run ruff check src/ tests/ scripts/ baselines/
+        run: uv run --no-sync ruff check src/ tests/ scripts/ baselines/
       - name: Ruff format check
-        run: uv run ruff format --check src/ tests/ scripts/ baselines/
+        run: uv run --no-sync ruff format --check src/ tests/ scripts/ baselines/
 
   typecheck:
     runs-on: ubuntu-latest
@@ -45,9 +45,9 @@ jobs:
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
       - name: Mypy
-        run: uv run mypy src/
+        run: uv run --no-sync mypy src/
 
   test:
     runs-on: ubuntu-latest
@@ -65,13 +65,13 @@ jobs:
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
       - name: Run tests
         run: |
           if [ "${{ matrix.python-version }}" = "3.11" ]; then
-            uv run pytest --strict-markers -ra --cov=grain_guard --cov-report=term-missing --cov-report=xml:coverage.xml
+            uv run --no-sync pytest --strict-markers -ra --cov=grain_guard --cov-report=term-missing --cov-report=xml:coverage.xml
           else
-            uv run pytest --strict-markers -ra
+            uv run --no-sync pytest --strict-markers -ra
           fi
       - name: Upload coverage
         if: matrix.python-version == '3.11'
@@ -81,7 +81,7 @@ jobs:
           path: coverage.xml
           if-no-files-found: error
       - name: Smoke tests
-        run: uv run pytest -m smoke --tb=short -q
+        run: uv run --no-sync pytest -m smoke --tb=short -q
 
   guards:
     name: Sonar mechanical guard
@@ -112,7 +112,7 @@ jobs:
         with:
           enable-cache: true
       - name: Lint workflows
-        run: uvx --from zizmor==1.29.0 zizmor --no-progress .github/workflows/ci.yml
+        run: uvx --no-build --from zizmor==1.29.0 zizmor --no-progress .github/workflows/ci.yml
 
   sonar:
     name: SonarQube Cloud

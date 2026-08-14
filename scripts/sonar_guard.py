@@ -71,6 +71,18 @@ def _assert_float_comparisons(tree: ast.AST, path: Path) -> list[Finding]:
     return findings
 
 
+def _safe_path(path: Path) -> Path:
+    base = Path.cwd().resolve()
+    resolved = path.resolve()
+    if not resolved.is_relative_to(base):
+        raise ValueError(f"path escapes the repository: {path}")
+    return resolved
+
+
+def _relative_path(path: Path) -> Path:
+    return path.relative_to(Path.cwd().resolve())
+
+
 def _composite_assertions(tree: ast.AST, path: Path) -> list[Finding]:
     findings: list[Finding] = []
     for node in ast.walk(tree):
@@ -169,19 +181,21 @@ def _is_test_file(path: Path) -> bool:
 
 
 def _check_python_file(path: Path) -> list[Finding]:
+    path = _safe_path(path)
+    display_path = _relative_path(path)
     try:
         source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
+        tree = ast.parse(source, filename=str(display_path))
     except (OSError, SyntaxError, UnicodeDecodeError) as error:
-        print(f"{path}: unable to inspect ({error})")
+        print(f"{display_path}: unable to inspect ({error})")
         return []
     findings = [
-        *_assert_float_comparisons(tree, path),
-        *_bare_random_calls(tree, path),
-        *_uncommented_passes(tree, source, path),
+        *_assert_float_comparisons(tree, display_path),
+        *_bare_random_calls(tree, display_path),
+        *_uncommented_passes(tree, source, display_path),
     ]
     if _is_test_file(path):
-        findings.extend(_composite_assertions(tree, path))
+        findings.extend(_composite_assertions(tree, display_path))
     return findings
 
 
@@ -232,7 +246,9 @@ def _pip_command_segments(command: str) -> list[str]:
     segments: list[str] = []
     for match in _PIP_INSTALL.finditer(command):
         segment = command[match.start() :]
-        segment = re.split(r"\s*(?:&&|;)\s*", segment, maxsplit=1)[0]
+        separator = re.search(r"&&|;", segment)
+        if separator is not None:
+            segment = segment[: separator.start()]
         segments.append(segment.replace("\\\n", " "))
     return segments
 
@@ -305,47 +321,57 @@ def _requirement_is_pinned(requirement: str) -> bool:
 
 
 def _workflow_findings(path: Path) -> list[Finding]:
+    base = Path.cwd().resolve()
+    path = path.resolve()
+    if not path.is_relative_to(base):
+        raise ValueError(f"path escapes the repository: {path}")
+    display_path = _relative_path(path)
     try:
         source = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
-        print(f"{path}: unable to inspect ({error})")
+        print(f"{display_path}: unable to inspect ({error})")
         return []
+    return [
+        finding
+        for line, command in _workflow_commands(source)
+        for segment in _pip_command_segments(command)
+        for finding in _workflow_segment_findings(display_path, line, segment)
+    ]
+
+
+def _workflow_segment_findings(path: Path, line: int, segment: str) -> list[Finding]:
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        tokens = segment.split()
+    install_index = next(
+        (index for index, token in enumerate(tokens) if token == "install"),
+        len(tokens),
+    )
+    install_tokens = tokens[install_index + 1 :]
+    local_install = _editable_install_is_local(install_tokens)
     findings: list[Finding] = []
-    for line, command in _workflow_commands(source):
-        for segment in _pip_command_segments(command):
-            try:
-                tokens = shlex.split(segment)
-            except ValueError:
-                tokens = segment.split()
-            install_index = next(
-                (index for index, token in enumerate(tokens) if token == "install"),
-                len(tokens),
+    if "--only-binary" not in install_tokens and not local_install:
+        findings.append(
+            Finding(
+                path,
+                line,
+                "S8541",
+                "pip install must include --only-binary :all: for published packages",
             )
-            install_tokens = tokens[install_index + 1 :]
-            if "--only-binary" not in install_tokens and not _editable_install_is_local(
-                install_tokens
-            ):
-                findings.append(
-                    Finding(
-                        path,
-                        line,
-                        "S8541",
-                        "pip install must include --only-binary :all: for published packages",
-                    )
-                )
-            if _editable_install_is_local(install_tokens):
-                continue
-            if "--require-hashes" not in install_tokens:
-                requirements = _requirement_tokens(install_tokens)
-                if requirements and not all(_requirement_is_pinned(req) for req in requirements):
-                    findings.append(
-                        Finding(
-                            path,
-                            line,
-                            "S8544",
-                            "pip install requirements must be version-pinned or hashed",
-                        )
-                    )
+        )
+    if local_install or "--require-hashes" in install_tokens:
+        return findings
+    requirements = _requirement_tokens(install_tokens)
+    if requirements and not all(_requirement_is_pinned(req) for req in requirements):
+        findings.append(
+            Finding(
+                path,
+                line,
+                "S8544",
+                "pip install requirements must be version-pinned or hashed",
+            )
+        )
     return findings
 
 
@@ -363,17 +389,26 @@ def main() -> int:
         help="files or directories to scan",
     )
     args = parser.parse_args()
+    try:
+        requested_paths = [_safe_path(path) for path in args.paths]
+    except ValueError as error:
+        parser.error(str(error))
     if args.workflows:
-        paths = args.paths or [Path(".github/workflows")]
+        paths = requested_paths or [_safe_path(Path(".github/workflows"))]
         findings = [
             finding for path in _workflow_files(paths) for finding in _workflow_findings(path)
         ]
     else:
-        paths = args.paths or [Path("src"), Path("tests"), Path("scripts"), Path("baselines")]
+        paths = requested_paths or [
+            _safe_path(Path("src")),
+            _safe_path(Path("tests")),
+            _safe_path(Path("scripts")),
+            _safe_path(Path("baselines")),
+        ]
         findings = [
             finding for path in _python_files(paths) for finding in _check_python_file(path)
         ]
-        workflow_paths = [path for path in args.paths if path.suffix in _WORKFLOW_SUFFIXES]
+        workflow_paths = [path for path in requested_paths if path.suffix in _WORKFLOW_SUFFIXES]
         findings.extend(
             finding
             for path in _workflow_files(workflow_paths)
