@@ -408,30 +408,31 @@ class GrainGuardAdapter(DomainAdapter):
         stream_data: list[NDArray[np.float64]],
         stream_labels: list[str],
     ) -> EventLocation:
-        """Infer report location from pest density stream peak."""
+        """Infer report location from a peak and its declared sensor geometry."""
+        streams_by_label = {stream.label: stream for stream in self._streams}
+        candidates: list[tuple[int, NDArray[np.float64], StreamMetadata]] = []
         for data, label in zip(stream_data, stream_labels, strict=False):
-            if "pest" in label or "trap" in label:
-                if data.size == 0:
-                    continue
-                peak_idx = int(np.argmax(data))
-                trap_index = peak_idx // PheromoneTrap(row=0, col=0).output_dim
-                if trap_index < len(self._traps):
-                    trap = self._traps[trap_index]
-                    return (trap.row, trap.col)
-        for data, label in zip(stream_data, stream_labels, strict=False):
-            if "satellite" in label and data.size > 0:
-                peak_idx = int(np.argmax(np.abs(data)))
-                zone_index = peak_idx // 3
-                zone_row, zone_col = self._zone_indices()[zone_index]
-                center = self._zone_geometry(zone_row, zone_col)[0]
-                return (int(round(center[0])), int(round(center[1])))
-        if stream_data and stream_data[0].size > 0:
-            peak_idx = int(np.argmax(np.abs(stream_data[0])))
-            if stream_labels and "satellite" in stream_labels[0]:
-                zone_index = peak_idx // 3
-                zone_row, zone_col = self._zone_indices()[zone_index]
-                center = self._zone_geometry(zone_row, zone_col)[0]
-                return (int(round(center[0])), int(round(center[1])))
+            stream = streams_by_label.get(label)
+            if stream is None or data.size == 0 or stream.metadata is None:
+                continue
+            sensor_coordinates = stream.metadata.sensor_coordinates
+            if sensor_coordinates is None or not any(
+                coordinate is not None for coordinate in sensor_coordinates
+            ):
+                continue
+            priority = 0 if ("pest" in label or "trap" in label) else 1
+            candidates.append((priority, data, stream.metadata))
+
+        if not candidates:
+            return (0, 0)
+
+        _, data, metadata = min(candidates, key=lambda candidate: candidate[0])
+        peak_idx = int(np.argmax(np.abs(data)))
+        sensor_coordinates = metadata.sensor_coordinates
+        if sensor_coordinates is not None and peak_idx < len(sensor_coordinates):
+            coordinate = sensor_coordinates[peak_idx]
+            if coordinate is not None:
+                return (int(round(coordinate[0])), int(round(coordinate[1])))
         return (0, 0)
 
     def score_relevance(self, signal_vector: NDArray[np.float64], user: User) -> float:

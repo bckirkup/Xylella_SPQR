@@ -82,34 +82,73 @@ class TestGrainGuardAdapter:
 
     def test_decoder_uses_trap_geometry(self) -> None:
         adapter = GrainGuardAdapter(seed=42)
-        data = np.zeros(20)
-        data[2 * 2 + 1] = 1.0
-        expected = (adapter._traps[2].row, adapter._traps[2].col)
-        assert adapter.infer_report_location([data], ["pheromone_traps"]) == expected
-
-    def test_decoder_uses_satellite_zone_geometry(self) -> None:
-        adapter = GrainGuardAdapter(seed=42)
-        data = np.zeros(75)
-        data[7 * 3 + 2] = 1.0
-        zone_row, zone_col = adapter._zone_indices()[7]
-        center = adapter._zone_geometry(zone_row, zone_col)[0]
-        expected = (int(round(center[0])), int(round(center[1])))
-        assert adapter.infer_report_location([data], ["satellite_indices"]) == expected
+        stream = next(
+            stream for stream in adapter.get_streams() if stream.label == "pheromone_traps"
+        )
+        assert stream.metadata is not None
+        assert stream.metadata.sensor_coordinates is not None
+        feature_index = 5
+        data = np.zeros(stream.dimensionality)
+        data[feature_index] = 1.0
+        coordinate = stream.metadata.sensor_coordinates[feature_index]
+        assert coordinate is not None
+        expected = (int(round(coordinate[0])), int(round(coordinate[1])))
+        assert adapter.infer_report_location([data], [stream.label]) == expected
 
     def test_decoder_prioritizes_trap_geometry_over_satellite_fallback(self) -> None:
         adapter = GrainGuardAdapter(seed=42)
-        satellite = np.zeros(75)
+        streams = {stream.label: stream for stream in adapter.get_streams()}
+        satellite_stream = streams["satellite_indices"]
+        trap_stream = streams["pheromone_traps"]
+        satellite = np.zeros(satellite_stream.dimensionality)
         satellite[0] = 1.0
-        traps = np.zeros(20)
-        traps[2 * 2] = 2.0
-        expected = (adapter._traps[2].row, adapter._traps[2].col)
+        traps = np.zeros(trap_stream.dimensionality)
+        traps[2] = 2.0
+        assert trap_stream.metadata is not None
+        assert trap_stream.metadata.sensor_coordinates is not None
+        coordinate = trap_stream.metadata.sensor_coordinates[2]
+        assert coordinate is not None
+        expected = (int(round(coordinate[0])), int(round(coordinate[1])))
         assert (
             adapter.infer_report_location(
                 [satellite, traps],
-                ["satellite_indices", "pheromone_traps"],
+                [satellite_stream.label, trap_stream.label],
             )
             == expected
         )
+
+    def test_decoder_uses_weather_geometry(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        stream = next(
+            stream for stream in adapter.get_streams() if stream.label == "weather_observations"
+        )
+        assert stream.metadata is not None
+        assert stream.metadata.sensor_coordinates is not None
+        feature_index = 3
+        data = np.zeros(stream.dimensionality)
+        data[feature_index] = 1.0
+        coordinate = stream.metadata.sensor_coordinates[feature_index]
+        assert coordinate is not None
+        expected = (int(round(coordinate[0])), int(round(coordinate[1])))
+        assert adapter.infer_report_location([data], [stream.label]) == expected
+
+    def test_decoder_round_trips_declared_sensor_geometry(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        for stream in adapter.get_streams():
+            assert stream.metadata is not None
+            sensor_coordinates = stream.metadata.sensor_coordinates
+            assert sensor_coordinates is not None
+            feature_index = next(
+                index
+                for index, coordinate in enumerate(sensor_coordinates)
+                if coordinate is not None
+            )
+            data = np.zeros(stream.dimensionality)
+            data[feature_index] = 1.0
+            coordinate = sensor_coordinates[feature_index]
+            assert coordinate is not None
+            expected = (int(round(coordinate[0])), int(round(coordinate[1])))
+            assert adapter.infer_report_location([data], [stream.label]) == expected
 
     def test_score_relevance(self) -> None:
         adapter = GrainGuardAdapter()
