@@ -194,11 +194,15 @@ class GrainGuardAdapter(DomainAdapter):
         - pest_stream: pheromone trap observations
         - weather_stream: weather station readings
         - soil_stream: soil moisture readings
+        - drone_stream: scheduled mobile drone imagery
+        - yield_stream: harvest-time yield observations
         """
         sat_dim = self._satellite.output_dim
         trap_dim = len(self._traps) * PheromoneTrap(row=0, col=0).output_dim
         weather_dim = len(self._weather_stations) * AgWeatherStation(row=0, col=0).output_dim
         soil_dim = len(self._soil_sensors) * SoilSensor(row=0, col=0).output_dim
+        drone_dim = self._drone_imager.output_dim
+        yield_dim = self._yield_monitor.output_dim
 
         self._streams = [
             Stream(
@@ -228,6 +232,20 @@ class GrainGuardAdapter(DomainAdapter):
                 label="soil_moisture",
                 current_data=np.zeros(soil_dim),
                 metadata=self._soil_metadata(),
+            ),
+            Stream(
+                stream_type=StreamType.RAW,
+                dimensionality=drone_dim,
+                label="drone_imagery",
+                current_data=np.zeros(drone_dim),
+                metadata=self._drone_metadata(),
+            ),
+            Stream(
+                stream_type=StreamType.RAW,
+                dimensionality=yield_dim,
+                label="yield_monitor",
+                current_data=np.zeros(yield_dim),
+                metadata=self._yield_metadata(),
             ),
         ]
 
@@ -305,6 +323,40 @@ class GrainGuardAdapter(DomainAdapter):
             identity=[None] * len(coordinates),
             footprints=[(0.0, 0.0)] * len(coordinates),
             resolution=[0.0] * len(coordinates),
+        )
+
+    def _drone_metadata(self) -> StreamMetadata:
+        """Declare the mobile drone's dynamic location and instrument contract."""
+        return StreamMetadata(
+            coordinates=[None] * self._drone_imager.output_dim,
+            sensor_coordinates=None,
+            modality=["pest_detection", "weed_detection", "crop_stress", "thermal_detection"],
+            identity=["drone_imager"] * self._drone_imager.output_dim,
+            footprints=[(1.0, 1.0)] * self._drone_imager.output_dim,
+            resolution=[1.0] * self._drone_imager.output_dim,
+        )
+
+    def _yield_metadata(self) -> StreamMetadata:
+        """Declare fixed yield-zone geometry and retrospective context."""
+        coordinates: list[tuple[float, ...] | None] = []
+        footprints: list[tuple[float, ...] | None] = []
+        resolutions: list[float | None] = []
+        for zone in range(self._yield_monitor.n_zones):
+            row_start = zone * self._field.rows // self._yield_monitor.n_zones
+            row_end = (zone + 1) * self._field.rows // self._yield_monitor.n_zones
+            height = max(row_end - row_start, 1)
+            coordinates.append(
+                (float(row_start + (height - 1) / 2.0), float(self._field.cols - 1) / 2.0)
+            )
+            footprints.append((float(height), float(self._field.cols)))
+            resolutions.append(float(max(height, self._field.cols)))
+        return StreamMetadata(
+            coordinates=coordinates,
+            sensor_coordinates=list(coordinates),
+            modality=["yield_context"] * self._yield_monitor.n_zones,
+            identity=[f"yield_zone_{zone}" for zone in range(self._yield_monitor.n_zones)],
+            footprints=footprints,
+            resolution=resolutions,
         )
 
     def _zone_indices(self) -> list[tuple[int, int]]:
@@ -407,33 +459,50 @@ class GrainGuardAdapter(DomainAdapter):
         self,
         stream_data: list[NDArray[np.float64]],
         stream_labels: list[str],
-    ) -> EventLocation:
-        """Infer report location from a peak and its declared sensor geometry."""
+    ) -> EventLocation | None:
+        """Infer location from tiered, normalized evidence and declared geometry."""
         streams_by_label = {stream.label: stream for stream in self._streams}
-        candidates: list[tuple[int, NDArray[np.float64], StreamMetadata]] = []
+        candidates: list[tuple[int, float, int, EventLocation]] = []
         for data, label in zip(stream_data, stream_labels, strict=False):
             stream = streams_by_label.get(label)
             if stream is None or data.size == 0 or stream.metadata is None:
                 continue
-            sensor_coordinates = stream.metadata.sensor_coordinates
-            if sensor_coordinates is None or not any(
-                coordinate is not None for coordinate in sensor_coordinates
-            ):
+            coordinates = stream.metadata.sensor_coordinates or stream.metadata.coordinates
+            if coordinates is None:
                 continue
-            priority = 0 if ("pest" in label or "trap" in label) else 1
-            candidates.append((priority, data, stream.metadata))
-
+            magnitudes = np.abs(data).astype(np.float64, copy=True)
+            finite = np.isfinite(magnitudes)
+            magnitudes[~finite] = 0.0
+            if not np.any(finite):
+                continue
+            scale = float(np.sqrt(np.mean(magnitudes**2)))
+            if scale <= 0.0:
+                continue
+            peak_idx = int(np.argmax(magnitudes))
+            if peak_idx >= len(coordinates) or coordinates[peak_idx] is None:
+                continue
+            coordinate = coordinates[peak_idx]
+            assert coordinate is not None
+            modalities = stream.metadata.modality or []
+            detection = any(
+                any(
+                    term in (modality or "").lower()
+                    for term in ("pest_detection", "catch_count", "trap")
+                )
+                for modality in modalities
+            )
+            tier = 0 if detection else 1
+            candidates.append(
+                (
+                    tier,
+                    float(magnitudes[peak_idx] / scale),
+                    peak_idx,
+                    (int(round(coordinate[0])), int(round(coordinate[1]))),
+                )
+            )
         if not candidates:
-            return (0, 0)
-
-        _, data, metadata = min(candidates, key=lambda candidate: candidate[0])
-        peak_idx = int(np.argmax(np.abs(data)))
-        sensor_coordinates = metadata.sensor_coordinates
-        if sensor_coordinates is not None and peak_idx < len(sensor_coordinates):
-            coordinate = sensor_coordinates[peak_idx]
-            if coordinate is not None:
-                return (int(round(coordinate[0])), int(round(coordinate[1])))
-        return (0, 0)
+            return None
+        return min(candidates, key=lambda candidate: (candidate[0], -candidate[1]))[3]
 
     def score_relevance(self, signal_vector: NDArray[np.float64], user: User) -> float:
         from tattletots.engine.relevance import score_report_relevance
@@ -610,6 +679,75 @@ class GrainGuardAdapter(DomainAdapter):
                 dtype="<U8",
             ),
         )
+
+        drone_row, drone_col = self._drone_location(time_step)
+        drone_observation = self._drone_imager.observe(
+            self._field.crops[drone_row][drone_col],
+            self._field.pests[drone_row][drone_col],
+            self._field.weeds[drone_row][drone_col],
+            self.rng,
+        )
+        drone_stream = self._streams[4]
+        if drone_stream.metadata is not None:
+            drone_stream.metadata = drone_stream.metadata.model_copy(
+                update={
+                    "coordinates": [(float(drone_row), float(drone_col))]
+                    * drone_stream.dimensionality
+                }
+            )
+        drone_stream.update(
+            drone_observation,
+            np.full(
+                drone_stream.dimensionality,
+                ObservationStatus.OBSERVED.value,
+                dtype="<U8",
+            ),
+        )
+
+        yield_stream = self._streams[5]
+        yield_observation = self._yield_monitor.observe(self._field.crops, self.rng)
+        if yield_observation is None:
+            if yield_stream.metadata is not None:
+                yield_stream.metadata = yield_stream.metadata.model_copy(
+                    update={
+                        "coordinates": [None] * yield_stream.dimensionality,
+                        "identity": [None] * yield_stream.dimensionality,
+                    }
+                )
+            yield_stream.update(
+                np.zeros(yield_stream.dimensionality),
+                np.full(
+                    yield_stream.dimensionality,
+                    ObservationStatus.MISSING.value,
+                    dtype="<U8",
+                ),
+            )
+        else:
+            if yield_stream.metadata is not None:
+                yield_stream.metadata = yield_stream.metadata.model_copy(
+                    update={
+                        "coordinates": list(
+                            yield_stream.metadata.sensor_coordinates
+                            or [None] * yield_stream.dimensionality
+                        ),
+                        "identity": [
+                            f"yield_zone_{zone}" for zone in range(yield_stream.dimensionality)
+                        ],
+                    }
+                )
+            yield_stream.update(
+                yield_observation,
+                np.full(
+                    yield_stream.dimensionality,
+                    ObservationStatus.OBSERVED.value,
+                    dtype="<U8",
+                ),
+            )
+
+    def _drone_location(self, time_step: int) -> tuple[int, int]:
+        """Return a deterministic geography-only flight-plan location."""
+        flat_index = time_step % (self._field.rows * self._field.cols)
+        return divmod(flat_index, self._field.cols)
 
     # ------------------------------------------------------------------
     # Public accessors

@@ -27,9 +27,13 @@ coarse spatial support rather than inventing cell-level precision.
 The sensor audit found no hidden-state violation in the published path:
 satellite reads crop observations, traps read the pest population at their
 fixed cells, soil probes read their crop cells, and weather stations read
-the weather object. `DroneImager` and `YieldMonitor` are constructed by the
-adapter but are never observed or published in a stream. Agents receive
-only the satellite, pheromone-trap, weather, and soil streams.
+the weather object. Agents now also receive scheduled drone imagery and
+harvest-time yield streams. The drone follows a deterministic geography-only
+sweep (`time_step` modulo the field cells), never selecting targets from
+infestation state. Its imagery is event-detection evidence. Yield monitoring
+is gated only by crop maturity (more than half of cells mature or harvested),
+is contextual/lagging evidence, and is explicitly marked missing before
+harvest.
 
 Metadata and statuses were tested against low-pest and heavy-infestation
 fields with identical sensor configurations. Their coordinates, static
@@ -43,9 +47,9 @@ steps=200)`.
 | Metric | Before contract/decoder work | After |
 | --- | ---: | ---: |
 | Valid | No | **Yes** |
-| Inferability precision | 0.000 | **0.969925** |
-| Decoder precision | 0.579 | **0.954887** |
-| Static-prior precision | 0.692 | **0.691729** |
+| Inferability precision | 0.000 | **0.934783** |
+| Decoder precision | 0.579 | **0.920290** |
+| Static-prior precision | 0.692 | **0.688406** |
 | Uniform chance | 0.100 | **0.002500** |
 | Candidate locations | 10 | **400** |
 

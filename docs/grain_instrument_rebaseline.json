@@ -1,0 +1,19 @@
+{
+  "valid": true,
+  "before": {
+    "inferability_precision": 0.0,
+    "decoder_precision": 0.579,
+    "static_prior_baseline": 0.692
+  },
+  "after": {
+    "inferability_precision": 0.9347826086956522,
+    "decoder_precision": 0.9202898550724637,
+    "static_prior_baseline": 0.6884057971014492
+  },
+  "steps": 200,
+  "notes": [
+    "Drone imagery is scheduled geography-only event-detection evidence.",
+    "Yield monitoring is maturity-gated contextual evidence and is explicitly missing off cadence.",
+    "The local static-prior reference is 0.692; measured after value is 0.688406."
+  ]
+}
