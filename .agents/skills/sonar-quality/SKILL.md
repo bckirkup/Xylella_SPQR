@@ -39,6 +39,16 @@ pytest --strict-markers -ra
   immutable commit references, or hashes. Local editable installs such as
   `pip install -e .` are exempt because their version is defined by the checked-out
   project metadata; they must still be reviewed for dependency reproducibility.
+- The same workflow checks cover UV installers:
+  - `uv sync` requires `--no-build` and `--locked` or `--frozen`.
+  - `uv pip install`, `uv add`, and `uv tool install` require `--no-build` and
+    pinned or hashed requirements.
+  - `uvx` and `uv tool run` require `--no-build` and a pinned `--from
+    package==version` requirement.
+  - `--no-binary-package <package>` may document source-build exceptions, but
+    does not replace `--no-build`.
+  - Non-installing commands such as `uv run`, `uv run --no-sync`, `uv lock`, and
+    `uv --version` are not checked by these rules.
 
 The mechanical guard is intentionally conservative and checks Python files plus
 workflow YAML. `zizmor` separately checks GitHub Actions action pinning.

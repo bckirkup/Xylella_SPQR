@@ -23,6 +23,26 @@ class Finding:
 
 
 _PIP_INSTALL = re.compile(r"(?<![\w-])(?:python(?:\s+-m)?\s+)?pip\s+install\b")
+_UV_SYNC = re.compile(r"(?<![\w-])uv\s+sync\b")
+_UV_PIP_INSTALL = re.compile(r"(?<![\w-])uv\s+pip\s+install\b")
+_UV_ADD = re.compile(r"(?<![\w-])uv\s+add\b")
+_UV_TOOL_INSTALL = re.compile(r"(?<![\w-])uv\s+tool\s+install\b")
+_UV_TOOL_RUN = re.compile(r"(?<![\w-])uv\s+tool\s+run\b")
+_UVX = re.compile(r"(?<![\w-])uvx\b")
+_INSTALLER_COMMAND = re.compile(
+    "|".join(
+        pattern.pattern
+        for pattern in (
+            _PIP_INSTALL,
+            _UV_SYNC,
+            _UV_PIP_INSTALL,
+            _UV_ADD,
+            _UV_TOOL_INSTALL,
+            _UV_TOOL_RUN,
+            _UVX,
+        )
+    )
+)
 _SHA256 = re.compile(r"(?:sha256=|#sha256=)[0-9a-fA-F]{64}")
 _COMMIT_SHA = re.compile(r"@[0-9a-fA-F]{40}(?:[#/]|$)")
 _VERSIONED_PACKAGE = re.compile(r"(?:===|==|~=|!=|>=|<=|>|<)")
@@ -229,7 +249,7 @@ def _workflow_commands(source: str) -> list[tuple[int, str]]:
     index = 0
     while index < len(lines):
         line = lines[index]
-        if not _PIP_INSTALL.search(line):
+        if not _INSTALLER_COMMAND.search(line):
             index += 1
             continue
         start = index
@@ -242,9 +262,9 @@ def _workflow_commands(source: str) -> list[tuple[int, str]]:
     return commands
 
 
-def _pip_command_segments(command: str) -> list[str]:
+def _installer_command_segments(command: str) -> list[str]:
     segments: list[str] = []
-    for match in _PIP_INSTALL.finditer(command):
+    for match in _INSTALLER_COMMAND.finditer(command):
         segment = command[match.start() :]
         separator = re.search(r"&&|;", segment)
         if separator is not None:
@@ -320,6 +340,100 @@ def _requirement_is_pinned(requirement: str) -> bool:
     )
 
 
+def _uv_command_kind(segment: str) -> str | None:
+    for kind, pattern in (
+        ("sync", _UV_SYNC),
+        ("pip_install", _UV_PIP_INSTALL),
+        ("add", _UV_ADD),
+        ("tool_install", _UV_TOOL_INSTALL),
+        ("tool_run", _UV_TOOL_RUN),
+        ("tool_run", _UVX),
+    ):
+        if pattern.match(segment):
+            return kind
+    return None
+
+
+def _uv_from_requirements(tokens: list[str]) -> list[str]:
+    requirements: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--from" and index + 1 < len(tokens):
+            requirements.append(tokens[index + 1])
+            index += 2
+            continue
+        if token.startswith("--from="):
+            requirements.append(token.removeprefix("--from="))
+        index += 1
+    return requirements
+
+
+def _uv_findings(path: Path, line: int, kind: str, tokens: list[str]) -> list[Finding]:
+    findings: list[Finding] = []
+    if "--no-build" not in tokens:
+        findings.append(
+            Finding(
+                path,
+                line,
+                "S8541",
+                "uv command must include --no-build for source-build safety",
+            )
+        )
+    if kind == "sync":
+        if "--locked" not in tokens and "--frozen" not in tokens:
+            findings.append(
+                Finding(
+                    path,
+                    line,
+                    "S8544",
+                    "uv sync must include --locked or --frozen for pinned resolution",
+                )
+            )
+        return findings
+    if kind == "tool_run":
+        requirements = _uv_from_requirements(tokens)
+        if not requirements or not all(_requirement_is_pinned(req) for req in requirements):
+            findings.append(
+                Finding(
+                    path,
+                    line,
+                    "S8544",
+                    "uv tool commands must use a pinned --from requirement",
+                )
+            )
+        return findings
+    if kind in {"pip_install", "add", "tool_install"}:
+        from_requirements = _uv_from_requirements(tokens)
+        if from_requirements:
+            requirements = from_requirements
+        else:
+            local_install = _editable_install_is_local(tokens)
+            if local_install or "--require-hashes" in tokens:
+                return findings
+            requirements = _requirement_tokens(tokens)
+        if requirements and not all(_requirement_is_pinned(req) for req in requirements):
+            findings.append(
+                Finding(
+                    path,
+                    line,
+                    "S8544",
+                    "uv install requirements must be version-pinned or hashed",
+                )
+            )
+    return findings
+
+
+def _uv_command_tokens(kind: str, tokens: list[str]) -> list[str]:
+    if kind == "tool_run" and tokens and tokens[0] == "uvx":
+        return tokens[1:]
+    command_index = next(
+        (index for index, token in enumerate(tokens) if token in {"sync", "add", "install", "run"}),
+        len(tokens),
+    )
+    return tokens[command_index + 1 :]
+
+
 def _workflow_findings(path: Path) -> list[Finding]:
     base = Path.cwd().resolve()
     path = path.resolve()
@@ -334,7 +448,7 @@ def _workflow_findings(path: Path) -> list[Finding]:
     return [
         finding
         for line, command in _workflow_commands(source)
-        for segment in _pip_command_segments(command)
+        for segment in _installer_command_segments(command)
         for finding in _workflow_segment_findings(display_path, line, segment)
     ]
 
@@ -344,6 +458,15 @@ def _workflow_segment_findings(path: Path, line: int, segment: str) -> list[Find
         tokens = shlex.split(segment)
     except ValueError:
         tokens = segment.split()
+    if _PIP_INSTALL.match(segment):
+        return _pip_findings(path, line, tokens)
+    kind = _uv_command_kind(segment)
+    if kind is None:
+        return []
+    return _uv_findings(path, line, kind, _uv_command_tokens(kind, tokens))
+
+
+def _pip_findings(path: Path, line: int, tokens: list[str]) -> list[Finding]:
     install_index = next(
         (index for index, token in enumerate(tokens) if token == "install"),
         len(tokens),
