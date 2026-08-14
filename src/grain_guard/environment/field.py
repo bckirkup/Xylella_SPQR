@@ -164,7 +164,7 @@ class CropField(BaseModel):
     def step(self, weather: AgWeather, rng: np.random.Generator) -> None:
         """Advance the field one time step."""
         self._advance_crops(weather)
-        self._advance_pests(weather, rng)
+        self._advance_pests(rng)
         self._advance_weeds(rng)
         self._pest_dispersal(weather, rng)
         self._update_biological_control(rng)
@@ -186,7 +186,7 @@ class CropField(BaseModel):
                 weed_damage = self.weeds[r][c].competition_factor * 0.01
                 crop.apply_damage(pest_damage + weed_damage)
 
-    def _advance_pests(self, weather: AgWeather, rng: np.random.Generator) -> None:
+    def _advance_pests(self, rng: np.random.Generator) -> None:
         growth_mod = self._landscape_pest_growth_modifier
         detection_penalty = self._landscape_detection_penalty
         bio_boost = self._landscape_biocontrol_boost
