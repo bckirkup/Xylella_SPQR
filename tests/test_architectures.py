@@ -40,7 +40,7 @@ class TestHumanIPM:
     def test_no_spray_off_interval(self, field_with_pests: CropField, weather: AgWeather) -> None:
         arch = HumanIPM(scout_interval=7)
         result = arch.step(field_with_pests, weather, time_step=3)
-        assert result["n_sprays"] == 0.0
+        assert result["n_sprays"] == pytest.approx(0.0, rel=0.0, abs=1e-12)
 
     def test_reset(self) -> None:
         arch = HumanIPM()

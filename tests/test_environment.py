@@ -15,11 +15,11 @@ from grain_guard.environment.weed import WeedPopulation
 class TestAgWeather:
     def test_gdd_positive(self) -> None:
         w = AgWeather(temperature=25.0)
-        assert w.growing_degree_days == 15.0
+        assert w.growing_degree_days == pytest.approx(15.0, rel=0.0, abs=1e-12)
 
     def test_gdd_zero_below_base(self) -> None:
         w = AgWeather(temperature=5.0)
-        assert w.growing_degree_days == 0.0
+        assert w.growing_degree_days == pytest.approx(0.0, rel=0.0, abs=1e-12)
 
     def test_spray_safe(self) -> None:
         w = AgWeather(wind_speed=3.0, precipitation=0.0)
@@ -47,8 +47,8 @@ class TestCropCell:
     def test_initial_state(self) -> None:
         c = CropCell()
         assert c.growth_stage == GrowthStage.SEEDLING
-        assert c.health == 1.0
-        assert c.yield_potential == 1.0
+        assert c.health == pytest.approx(1.0, rel=0.0, abs=1e-12)
+        assert c.yield_potential == pytest.approx(1.0, rel=0.0, abs=1e-12)
 
     def test_phenology_advance(self) -> None:
         c = CropCell()
@@ -75,7 +75,7 @@ class TestCropCell:
 class TestPestPopulation:
     def test_initial_density(self) -> None:
         p = PestPopulation()
-        assert p.density == 0.0
+        assert p.density == pytest.approx(0.0, rel=0.0, abs=1e-12)
 
     def test_growth(self) -> None:
         rng = np.random.default_rng(42)
@@ -111,7 +111,7 @@ class TestPestPopulation:
 class TestWeedPopulation:
     def test_initial_density(self) -> None:
         w = WeedPopulation()
-        assert w.density == 0.0
+        assert w.density == pytest.approx(0.0, rel=0.0, abs=1e-12)
 
     def test_germination(self) -> None:
         rng = np.random.default_rng(42)

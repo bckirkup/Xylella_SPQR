@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.crop import CropCell, GrowthStage
@@ -16,7 +17,9 @@ class YieldMonitor(BaseModel):
 
     n_zones: int = Field(default=5, ge=1, description="Number of yield aggregation zones")
 
-    def observe(self, crops: list[list[CropCell]], rng: np.random.Generator) -> np.ndarray | None:
+    def observe(
+        self, crops: list[list[CropCell]], rng: np.random.Generator
+    ) -> NDArray[np.float64] | None:
         """Return per-zone yield vector or None if not harvest time.
 
         Only returns data when >50% of cells are mature or harvested.

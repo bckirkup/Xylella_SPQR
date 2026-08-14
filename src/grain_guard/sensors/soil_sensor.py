@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.crop import CropCell
@@ -17,7 +18,7 @@ class SoilSensor(BaseModel):
     row: int = Field(ge=0)
     col: int = Field(ge=0)
 
-    def observe(self, crop: CropCell, rng: np.random.Generator) -> np.ndarray:
+    def observe(self, crop: CropCell, rng: np.random.Generator) -> NDArray[np.float64]:
         """Return [moisture, temperature_proxy, conductivity_proxy].
 
         Output dimensionality: 3.

@@ -137,7 +137,7 @@ class TestWorldIntegration:
         ecology = result.domain_metrics["ecology"]
         assert ecology["initiation_is_degenerate"] is True
         assert ecology["initiation_degeneracy_reasons"]
-        assert ecology["event_prevalence"] == 0.0
+        assert ecology["event_prevalence"] == pytest.approx(0.0, rel=0.0, abs=1e-12)
 
     def test_cost_computation(self) -> None:
         """Adapter cost model should return valid dict."""

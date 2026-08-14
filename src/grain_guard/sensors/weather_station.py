@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.weather import AgWeather
@@ -17,7 +18,7 @@ class AgWeatherStation(BaseModel):
     row: int = Field(ge=0)
     col: int = Field(ge=0)
 
-    def observe(self, weather: AgWeather, rng: np.random.Generator) -> np.ndarray:
+    def observe(self, weather: AgWeather, rng: np.random.Generator) -> NDArray[np.float64]:
         """Return [temp, humidity, wind_speed, wind_dir, precip] with sensor noise.
 
         Output dimensionality: 5.

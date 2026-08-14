@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.crop import CropCell
@@ -28,7 +29,7 @@ class DroneImager(BaseModel):
         pest: PestPopulation,
         weed: WeedPopulation,
         rng: np.random.Generator,
-    ) -> np.ndarray:
+    ) -> NDArray[np.float64]:
         """Return [pest_signal, weed_signal, stress_signal, thermal_anomaly] for one cell.
 
         Output dimensionality: 4.

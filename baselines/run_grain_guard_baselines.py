@@ -93,8 +93,7 @@ def _build_runs(
         res_tag = f"{resistance:.2f}".replace(".", "p")
         for seed in seeds:
             run_name = (
-                f"gg_baselines_{landscape}_pest{pest_level}_weed{weed_level}"
-                f"_res{res_tag}_s{seed}"
+                f"gg_baselines_{landscape}_pest{pest_level}_weed{weed_level}_res{res_tag}_s{seed}"
             )
             runs.append(
                 {
@@ -335,8 +334,7 @@ def main() -> int:
 
     print("\n=== Grain Guard Baselines Parameter Scan Summary ===")
     print(
-        f"{'Run Name':<50} | {'Status':<10} | {'Time (s)':<8} | "
-        f"{'A3 Yield':<10} | {'A3 Cost':<10}"
+        f"{'Run Name':<50} | {'Status':<10} | {'Time (s)':<8} | {'A3 Yield':<10} | {'A3 Cost':<10}"
     )
     print("-" * 100)
     for name, run_res in results_key["runs"].items():

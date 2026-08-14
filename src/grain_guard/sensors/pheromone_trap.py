@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.pest import PestPopulation
@@ -21,7 +22,9 @@ class PheromoneTrap(BaseModel):
         default=0.3, ge=0.0, le=1.0, description="Fraction of local adults caught"
     )
 
-    def observe(self, pest: PestPopulation, time_step: int, rng: np.random.Generator) -> np.ndarray:
+    def observe(
+        self, pest: PestPopulation, time_step: int, rng: np.random.Generator
+    ) -> NDArray[np.float64]:
         """Return [catch_count, resistance_proxy] for this trap location.
 
         Output dimensionality: 2.

@@ -234,11 +234,11 @@ class TestPestThreshold:
 
     def test_default_threshold(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, seed=1)
-        assert adapter.pest_threshold == 10.0
+        assert adapter.pest_threshold == pytest.approx(10.0, rel=0.0, abs=1e-12)
 
     def test_custom_threshold(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, pest_threshold=5.0, seed=1)
-        assert adapter.pest_threshold == 5.0
+        assert adapter.pest_threshold == pytest.approx(5.0, rel=0.0, abs=1e-12)
 
     def test_lower_threshold_more_events(self) -> None:
         """Lower threshold should trigger more ground truth events."""
@@ -282,14 +282,22 @@ class TestCostCoefficients:
     def test_cost_coefficients_accessor(self) -> None:
         cc = CostCoefficients(surveillance=0.5)
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, cost_coefficients=cc, seed=1)
-        assert adapter.cost_coefficients.surveillance == 0.5
-        assert adapter.cost_coefficients.response == 1.5  # default
+        assert adapter.cost_coefficients.surveillance == pytest.approx(
+            0.5,
+            rel=0.0,
+            abs=1e-12,
+        )
+        assert adapter.cost_coefficients.response == pytest.approx(
+            1.5,
+            rel=0.0,
+            abs=1e-12,
+        )  # default
 
     def test_zero_costs(self) -> None:
         cc = CostCoefficients(surveillance=0, response=0, false_alarm=0, missed=0)
         adapter = GrainGuardAdapter(grid_rows=8, grid_cols=8, cost_coefficients=cc, seed=1)
         costs = adapter.compute_costs(n_escalations=10, n_correct=5, n_false_alarms=3, n_missed=2)
-        assert all(v == 0.0 for v in costs.values())
+        assert all(v == pytest.approx(0.0, rel=0.0, abs=1e-12) for v in costs.values())
 
 
 # ---------------------------------------------------------------------------
