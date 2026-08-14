@@ -31,7 +31,7 @@ from grain_guard.sensors.weather_station import AgWeatherStation
 from grain_guard.sensors.yield_monitor import YieldMonitor
 from grain_guard.users.ag_users import create_ag_users
 
-DEFAULT_ENGINE_MAX_DIM = 30
+DEFAULT_ENGINE_MAX_DIM = 75
 """Default TattleTots engine per-agent input dimensionality cap."""
 
 SPRAY_EFFICACY = 0.8
@@ -94,7 +94,7 @@ class GrainGuardAdapter(DomainAdapter):
     into abstract data streams consumable by Tot agents.
 
     All sensor dimensionalities and fleet sizes are configurable.  Pass
-    ``engine_max_dim`` (default 30) to surface the TattleTots engine's
+    ``engine_max_dim`` (default 75) to surface the TattleTots engine's
     per-agent input cap; a warning is emitted when any stream exceeds it.
     """
 

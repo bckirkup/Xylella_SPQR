@@ -11,7 +11,7 @@
     "trust_delta_pos": 0.05,
     "trust_delta_miss": 0.15,
     "subsidy_rate": 0.1,
-    "max_stream_dim": 30
+    "max_stream_dim": 75
   },
   "domain": {
     "landscape": "monoculture",
