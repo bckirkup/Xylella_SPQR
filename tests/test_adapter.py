@@ -29,11 +29,87 @@ class TestGrainGuardAdapter:
         for s in adapter.get_streams():
             assert s.current_data.size > 0
 
+    def test_streams_publish_static_geometry_and_statuses(self) -> None:
+        adapter = GrainGuardAdapter()
+        streams = adapter.get_streams()
+        assert adapter.get_location_frame() == ((0, 0), (19, 19))
+        assert all(stream.metadata is not None for stream in streams)
+        satellite, traps, weather, soil = streams
+        assert satellite.metadata is not None
+        assert satellite.metadata.sensor_coordinates is not None
+        assert all(coordinate is not None for coordinate in satellite.metadata.sensor_coordinates)
+        assert satellite.metadata.footprints is not None
+        assert all(
+            footprint is not None and footprint[0] > 1.0
+            for footprint in satellite.metadata.footprints
+        )
+        assert traps.metadata is not None
+        assert traps.metadata.sensor_coordinates is not None
+        assert weather.metadata is not None
+        assert weather.metadata.sensor_coordinates is not None
+        assert soil.metadata is not None
+        assert soil.metadata.sensor_coordinates is not None
+
+        adapter.step(0)
+        assert np.all(satellite.current_status == "observed")
+        adapter.step(1)
+        assert np.all(satellite.current_status == "missing")
+        assert all(coordinate is None for coordinate in satellite.metadata.coordinates or [])
+        assert all(coordinate is not None for coordinate in satellite.metadata.sensor_coordinates)
+
+    def test_metadata_and_statuses_ignore_pest_state(self) -> None:
+        low = GrainGuardAdapter(seed=42)
+        high = GrainGuardAdapter(seed=42)
+        for row in range(high.field.rows):
+            for col in range(high.field.cols):
+                high.field.pests[row][col].density = 100.0
+
+        for time_step in (0, 1):
+            low.step(time_step)
+            high.step(time_step)
+            for low_stream, high_stream in zip(low.get_streams(), high.get_streams(), strict=True):
+                assert low_stream.metadata == high_stream.metadata
+                np.testing.assert_array_equal(
+                    low_stream.current_status,
+                    high_stream.current_status,
+                )
+
     def test_ground_truth_bool(self) -> None:
         adapter = GrainGuardAdapter()
         adapter.step(0)
         result = adapter.get_ground_truth(0)
         assert isinstance(result, bool)
+
+    def test_decoder_uses_trap_geometry(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        data = np.zeros(20)
+        data[2 * 2 + 1] = 1.0
+        expected = (adapter._traps[2].row, adapter._traps[2].col)
+        assert adapter.infer_report_location([data], ["pheromone_traps"]) == expected
+
+    def test_decoder_uses_satellite_zone_geometry(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        data = np.zeros(75)
+        data[7 * 3 + 2] = 1.0
+        zone_row, zone_col = adapter._zone_indices()[7]
+        center = adapter._zone_geometry(zone_row, zone_col)[0]
+        expected = (int(round(center[0])), int(round(center[1])))
+        assert adapter.infer_report_location([data], ["satellite_indices"]) == expected
+
+    def test_decoder_prioritizes_trap_geometry_over_satellite_fallback(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        satellite = np.zeros(75)
+        satellite[0] = 1.0
+        traps = np.zeros(20)
+        traps[2 * 2] = 2.0
+        expected = (adapter._traps[2].row, adapter._traps[2].col)
+        assert (
+            adapter.infer_report_location(
+                [satellite, traps],
+                ["satellite_indices", "pheromone_traps"],
+            )
+            == expected
+        )
 
     def test_score_relevance(self) -> None:
         adapter = GrainGuardAdapter()
