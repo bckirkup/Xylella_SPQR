@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from tattletots.interface.adapter_conformance import assert_adapter_conformance
 from tattletots.models.dispatch_target import DispatchTarget
 from tattletots.models.report import Report
 
@@ -14,7 +15,7 @@ class TestGrainGuardAdapter:
     def test_get_streams(self) -> None:
         adapter = GrainGuardAdapter()
         streams = adapter.get_streams()
-        assert len(streams) == 4
+        assert len(streams) == 6
         for s in streams:
             assert s.dimensionality > 0
 
@@ -34,7 +35,7 @@ class TestGrainGuardAdapter:
         streams = adapter.get_streams()
         assert adapter.get_location_frame() == ((0, 0), (19, 19))
         assert all(stream.metadata is not None for stream in streams)
-        satellite, traps, weather, soil = streams
+        satellite, traps, weather, soil, drone, yield_monitor = streams
         assert satellite.metadata is not None
         assert satellite.metadata.sensor_coordinates is not None
         assert all(coordinate is not None for coordinate in satellite.metadata.sensor_coordinates)
@@ -49,6 +50,13 @@ class TestGrainGuardAdapter:
         assert weather.metadata.sensor_coordinates is not None
         assert soil.metadata is not None
         assert soil.metadata.sensor_coordinates is not None
+        assert drone.label == "drone_imagery"
+        assert drone.metadata is not None
+        assert drone.metadata.coordinates == [None] * drone.dimensionality
+        assert drone.metadata.sensor_coordinates is None
+        assert yield_monitor.label == "yield_monitor"
+        assert yield_monitor.metadata is not None
+        assert yield_monitor.metadata.sensor_coordinates is not None
 
         adapter.step(0)
         assert np.all(satellite.current_status == "observed")
@@ -68,11 +76,27 @@ class TestGrainGuardAdapter:
             low.step(time_step)
             high.step(time_step)
             for low_stream, high_stream in zip(low.get_streams(), high.get_streams(), strict=True):
-                assert low_stream.metadata == high_stream.metadata
+                if low_stream.label != "drone_imagery":
+                    assert low_stream.metadata == high_stream.metadata
                 np.testing.assert_array_equal(
                     low_stream.current_status,
                     high_stream.current_status,
                 )
+
+    def test_drone_flight_plan_is_hidden_state_independent(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        adapter.step(0)
+        first = adapter.get_streams()[4].metadata
+        adapter.step(1)
+        second = adapter.get_streams()[4].metadata
+        assert first is not None and second is not None
+        assert first.coordinates != second.coordinates
+
+    def test_yield_monitor_is_explicitly_missing_before_harvest(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        adapter.step(0)
+        assert np.all(adapter.get_streams()[5].current_status == "missing")
+        assert np.all(adapter.get_streams()[5].current_data == 0.0)
 
     def test_ground_truth_bool(self) -> None:
         adapter = GrainGuardAdapter()
@@ -137,7 +161,11 @@ class TestGrainGuardAdapter:
         for stream in adapter.get_streams():
             assert stream.metadata is not None
             sensor_coordinates = stream.metadata.sensor_coordinates
-            assert sensor_coordinates is not None
+            if sensor_coordinates is None:
+                adapter.step(0)
+                coordinates = stream.metadata.coordinates
+                assert coordinates is not None
+                sensor_coordinates = coordinates
             feature_index = next(
                 index
                 for index, coordinate in enumerate(sensor_coordinates)
@@ -149,6 +177,42 @@ class TestGrainGuardAdapter:
             assert coordinate is not None
             expected = (int(round(coordinate[0])), int(round(coordinate[1])))
             assert adapter.infer_report_location([data], [stream.label]) == expected
+
+    def test_decoder_prioritizes_drone_over_yield_context(self) -> None:
+        adapter = GrainGuardAdapter(seed=42)
+        drone, yield_monitor = adapter.get_streams()[4:]
+        drone_data = np.zeros(drone.dimensionality)
+        drone_data[0] = 1.0
+        yield_data = np.zeros(yield_monitor.dimensionality)
+        yield_data[0] = 100.0
+        assert drone.metadata is not None
+        adapter.step(0)
+        coordinates = drone.metadata.coordinates
+        assert coordinates is not None and coordinates[0] is not None
+        expected = (int(round(coordinates[0][0])), int(round(coordinates[0][1])))
+        assert (
+            adapter.infer_report_location(
+                [drone_data, yield_data],
+                [drone.label, yield_monitor.label],
+            )
+            == expected
+        )
+
+    def test_adapter_conformance_strict_state_independence(self) -> None:
+        def factory() -> tuple[GrainGuardAdapter, GrainGuardAdapter]:
+            quiet = GrainGuardAdapter(seed=42)
+            active = GrainGuardAdapter(seed=42)
+            for row in range(active.field.rows):
+                for col in range(active.field.cols):
+                    active.field.pests[row][col].density = 100.0
+            return quiet, active
+
+        assert_adapter_conformance(
+            GrainGuardAdapter(seed=42),
+            steps=20,
+            state_independence_factory=factory,
+            strict_state_independence=True,
+        )
 
     def test_score_relevance(self) -> None:
         adapter = GrainGuardAdapter()
