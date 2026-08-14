@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.crop import CropCell, CropType
@@ -39,7 +40,7 @@ class CropField(BaseModel):
     pests: list[list[PestPopulation]] = Field(default_factory=list)
     weeds: list[list[WeedPopulation]] = Field(default_factory=list)
 
-    biological_control: np.ndarray = Field(
+    biological_control: NDArray[np.float64] = Field(
         default_factory=lambda: np.array([], dtype=np.float64),
         description="Beneficial insect density per cell (flattened)",
     )

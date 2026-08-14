@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from grain_guard.environment.crop import CropCell
@@ -25,7 +26,7 @@ class SatelliteSensor(BaseModel):
         crops: list[list[CropCell]],
         time_step: int,
         rng: np.random.Generator,
-    ) -> np.ndarray | None:
+    ) -> NDArray[np.float64] | None:
         """Return zone-level [NDVI, NDRE, chlorophyll] or None if not revisit step.
 
         Output dimensionality: zone_rows * zone_cols * 3.

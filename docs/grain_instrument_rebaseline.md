@@ -63,15 +63,23 @@ opposite story; the new sensor calls consume RNG draws and shift the
 trajectory, so single-seed results are fragile and should not be quoted from
 this file.
 
-The conformance decoder round-trip has a known coverage limitation:
-`satellite_indices` has dimensionality 75 while the TattleTots engine cap is
-30, so the stream is silently truncated to 30 floats before agents see it.
-Declared satellite feature indices 30–74 therefore never reach any agent.
-The conformance decoder round-trip still passes because it feeds full-length
-vectors directly to the adapter decoder rather than the truncated vectors
-delivered by the engine. This branch resolves the separate omission where
-`DroneImager` and `YieldMonitor` were constructed but never called or
-published; it does not change the cap or this suite limitation.
+`satellite_indices` declares 75 features, and the engine cap was 30, so the
+stream was silently truncated before agents saw it and declared satellite
+feature indices 30–74 reached no agent. The cap is now 75, so every declared
+satellite feature is deliverable, and the TattleTots conformance suite checks
+declared feature counts against the deliverable ceiling so this class of
+mismatch cannot recur silently.
+
+Raising the cap did not improve agent-level performance. Measured through the
+integrated TattleTots layer (monoculture, 800 steps, seeds 42–46, otherwise
+identical configuration), mean report precision was `0.4715` at cap 30 and
+`0.4423` at cap 75, against a static-prior null of `0.6331` and `0.6624`
+respectively. All ten runs were flagged `initiation_is_degenerate` for
+`precision_not_above_static_prior`. The cap change is therefore justified as
+contract honesty — declared geometry that no agent can receive is not
+published evidence — and not as a performance improvement. Grain's integrated
+population failing to clear its own static-prior null is a separate and larger
+finding, independent of the cap.
 
 Final validator findings:
 
