@@ -79,6 +79,10 @@ def _safe_path(path: Path) -> Path:
     return resolved
 
 
+def _relative_path(path: Path) -> Path:
+    return path.relative_to(Path.cwd().resolve())
+
+
 def _composite_assertions(tree: ast.AST, path: Path) -> list[Finding]:
     findings: list[Finding] = []
     for node in ast.walk(tree):
@@ -178,19 +182,20 @@ def _is_test_file(path: Path) -> bool:
 
 def _check_python_file(path: Path) -> list[Finding]:
     path = _safe_path(path)
+    display_path = _relative_path(path)
     try:
         source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
+        tree = ast.parse(source, filename=str(display_path))
     except (OSError, SyntaxError, UnicodeDecodeError) as error:
-        print(f"{path}: unable to inspect ({error})")
+        print(f"{display_path}: unable to inspect ({error})")
         return []
     findings = [
-        *_assert_float_comparisons(tree, path),
-        *_bare_random_calls(tree, path),
-        *_uncommented_passes(tree, source, path),
+        *_assert_float_comparisons(tree, display_path),
+        *_bare_random_calls(tree, display_path),
+        *_uncommented_passes(tree, source, display_path),
     ]
     if _is_test_file(path):
-        findings.extend(_composite_assertions(tree, path))
+        findings.extend(_composite_assertions(tree, display_path))
     return findings
 
 
@@ -320,16 +325,17 @@ def _workflow_findings(path: Path) -> list[Finding]:
     path = path.resolve()
     if not path.is_relative_to(base):
         raise ValueError(f"path escapes the repository: {path}")
+    display_path = _relative_path(path)
     try:
         source = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
-        print(f"{path}: unable to inspect ({error})")
+        print(f"{display_path}: unable to inspect ({error})")
         return []
     return [
         finding
         for line, command in _workflow_commands(source)
         for segment in _pip_command_segments(command)
-        for finding in _workflow_segment_findings(path, line, segment)
+        for finding in _workflow_segment_findings(display_path, line, segment)
     ]
 
 
