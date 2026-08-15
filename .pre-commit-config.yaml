@@ -1,6 +1,7 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    # Keep this rev equal to the Ruff version in uv.lock.
+    rev: v0.16.2
     hooks:
       - id: ruff
         args: [--fix, "--config=lint.mccabe.max-complexity=15"]
