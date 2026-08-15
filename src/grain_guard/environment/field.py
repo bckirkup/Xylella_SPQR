@@ -36,6 +36,15 @@ class CropField(BaseModel):
     cols: int = Field(default=20, ge=1)
     landscape: LandscapeType = Field(default=LandscapeType.MONOCULTURE)
 
+    freeze_pest_evolution: bool = Field(
+        default=False,
+        description=(
+            "Hold the pest adversary fixed: resistance and behavioral escape traits "
+            "stop changing, while their random draws are still consumed so a frozen "
+            "run stays seed-aligned with an evolving run."
+        ),
+    )
+
     crops: list[list[CropCell]] = Field(default_factory=list)
     pests: list[list[PestPopulation]] = Field(default_factory=list)
     weeds: list[list[WeedPopulation]] = Field(default_factory=list)
@@ -55,6 +64,14 @@ class CropField(BaseModel):
             self._initialize_weeds()
         if self.biological_control.size == 0:
             self.biological_control = np.full(self.rows * self.cols, 5.0)
+        self.apply_pest_evolution_freeze(self.freeze_pest_evolution)
+
+    def apply_pest_evolution_freeze(self, frozen: bool) -> None:
+        """Freeze or unfreeze heritable pest traits across every cell."""
+        self.freeze_pest_evolution = frozen
+        for row in self.pests:
+            for pest in row:
+                pest.evolution_frozen = frozen
 
     def _initialize_crops(self) -> None:
         """Create crop grid based on landscape type."""
