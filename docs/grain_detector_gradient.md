@@ -210,7 +210,7 @@ uv pip install --no-deps -e ~/repos/TattleTots
 
 # 50 runs: 3 detector arms + 2 pest reference arms x 10 seeds
 uv run --no-sync --no-build python scripts/run_grain_gradient.py \
-  ./grain_gradient_output --steps 400 --seeds 42 43 44 45 46 47 48 49 50 51
+  grain_gradient_output --steps 400 --seeds 42 43 44 45 46 47 48 49 50 51
 ```
 
 Every run writes a unified `tattletots.output_schema.SimulationOutput` JSON

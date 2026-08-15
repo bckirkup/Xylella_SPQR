@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -56,15 +57,22 @@ def build_specs(seeds: Sequence[int], steps: int) -> list[ArmSpec]:
     return specs
 
 
-def _safe_output_dir(raw_path: Path) -> Path:
-    """Resolve an output directory under the repository without traversal."""
-    repo_root = Path(__file__).resolve().parents[1]
-    if raw_path.is_absolute() or ".." in raw_path.parts:
-        raise ValueError("output_path must be a relative path without '..'")
-    output_path = (repo_root / raw_path).resolve()
-    if not output_path.is_relative_to(repo_root):
-        raise ValueError("output_path must remain under the repository root")
-    return output_path
+SAFE_OUTPUT_DIR = re.compile(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*")
+"""Relative directory names accepted for output: no dots, no other separators."""
+
+
+def _safe_output_dir(raw_path: str) -> Path:
+    """Resolve an output directory under the repository without traversal.
+
+    Only names matching :data:`SAFE_OUTPUT_DIR` are accepted, so an absolute
+    path, a parent reference, or any other traversal attempt is rejected before
+    a path is built from it rather than checked afterwards.
+    """
+    if not SAFE_OUTPUT_DIR.fullmatch(raw_path):
+        raise ValueError(
+            "output_path must be a relative directory of letters, digits, '_', '-' and '/'"
+        )
+    return Path(__file__).resolve().parents[1] / raw_path
 
 
 def run_and_write(spec: ArmSpec, out_dir: Path) -> dict[str, Any]:
@@ -145,7 +153,10 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output_path", type=Path, help="relative output directory")
+    parser.add_argument(
+        "output_path",
+        help="output directory relative to the repository root, e.g. grain_gradient_output",
+    )
     parser.add_argument("--steps", type=int, default=400)
     parser.add_argument("--seeds", type=int, nargs="+", default=list(range(42, 52)))
     parser.add_argument("--workers", type=int, default=5)
