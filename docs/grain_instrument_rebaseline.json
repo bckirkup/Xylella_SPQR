@@ -45,11 +45,12 @@
         "landscape": "monoculture",
         "steps": 800,
         "seeds": "42-46",
+        "measurement_label": "prior-engine measurement",
         "precision_mean_cap30": 0.4715,
         "precision_mean_cap75": 0.4423,
         "static_prior_mean_cap30": 0.6331,
         "static_prior_mean_cap75": 0.6624,
-        "note": "Raising the cap did not improve agent-level precision, and all ten runs were flagged initiation_is_degenerate for precision_not_above_static_prior. The change is contract honesty, not a performance improvement."
+        "note": "This monoculture-only measurement used an earlier engine and is retained as a prior-engine result. The change is contract honesty, not a performance claim."
       }
     },
     {
@@ -61,6 +62,54 @@
       "description": "This branch publishes the previously constructed YieldMonitor, with maturity-gated observations explicitly marked missing off cadence."
     }
   ],
+  "cap_effect_measurement": {
+    "measurement_label": "current-engine agent-level remeasurement",
+    "grain_source_commit": "8e82a05",
+    "tattletots_engine_commit": "cee59f93f6973fa7fefb2f87dbb40a8ce0095113",
+    "harness": "scripts/run_grain_cap_effect.py",
+    "command": "uv run --frozen python scripts/run_grain_cap_effect.py /home/ubuntu/conformance-audit/grain_cap_effect_1786792274",
+    "output_path": "/home/ubuntu/conformance-audit/grain_cap_effect_1786792274/key.json",
+    "steps": 800,
+    "seeds": "42-46",
+    "seeds_per_arm": 5,
+    "landscapes": [
+      "monoculture",
+      "orchard"
+    ],
+    "caps": [
+      30,
+      75
+    ],
+    "workers": 5,
+    "agent_level_arms_are_engine_coupled": true,
+    "instrument_level_table_above_is_adapter_side_and_unchanged": true,
+    "arms": {
+      "cap30_monoculture": {
+        "mean_agent_report_precision": 0.46709629678241527,
+        "mean_static_prior": 0.5439259580743505
+      },
+      "cap75_monoculture": {
+        "mean_agent_report_precision": 0.514249575265005,
+        "mean_static_prior": 0.5656166933338916
+      },
+      "cap30_orchard": {
+        "mean_agent_report_precision": 0.36817582931412035,
+        "mean_static_prior": 0.47172809768724966
+      },
+      "cap75_orchard": {
+        "mean_agent_report_precision": 0.43916006919645934,
+        "mean_static_prior": 0.5347398804481147
+      }
+    },
+    "degeneracy": {
+      "runs": 20,
+      "initiation_is_degenerate": 20,
+      "grounded_yield_share_below_minimum": 20,
+      "precision_not_above_static_prior": 17,
+      "attention_insolvency_with_capacity_overshoot": 2
+    },
+    "interpretation": "The prior and current measurements differ, and cap direction is engine-dependent. Every current arm remains below its static-prior null, so the cap correction is not demonstrated competence above the null."
+  },
   "rows": [
     {"seed": 42, "decoder": 0.9548872180451128, "inferability": 0.9699248120300752, "static_prior": 0.6917293233082706, "event_steps": 133, "after_decoder": 0.9202898550724637, "after_inferability": 0.9347826086956522, "after_static_prior": 0.6884057971014492, "after_event_steps": 138},
     {"seed": 43, "decoder": 0.9558823529411765, "inferability": 0.9558823529411765, "static_prior": 0.7058823529411765, "event_steps": 136, "after_decoder": 0.9064748201438849, "after_inferability": 0.9424460431654677, "after_static_prior": 0.6834532374100719, "after_event_steps": 139},
