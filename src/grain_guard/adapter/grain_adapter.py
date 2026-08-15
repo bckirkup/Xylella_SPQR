@@ -116,10 +116,16 @@ class GrainGuardAdapter(DomainAdapter):
         engine_max_dim: int = DEFAULT_ENGINE_MAX_DIM,
         pest_intro_probability: float = 0.02,
         resistance_initial_frequency: float = 0.01,
+        freeze_pest_evolution: bool = False,
         seed: int = 42,
     ) -> None:
         self.rng = np.random.default_rng(seed)
-        self._field = CropField(rows=grid_rows, cols=grid_cols, landscape=landscape)
+        self._field = CropField(
+            rows=grid_rows,
+            cols=grid_cols,
+            landscape=landscape,
+            freeze_pest_evolution=freeze_pest_evolution,
+        )
         self._pest_intro_probability = pest_intro_probability
         self._apply_resistance_frequency(resistance_initial_frequency)
         self._weather = AgWeather()
@@ -144,6 +150,11 @@ class GrainGuardAdapter(DomainAdapter):
         self._setup_streams()
         self._warn_on_truncation()
         self._users = create_ag_users(n_signal_dims=self._total_stream_dims())
+
+    @property
+    def pest_evolution_frozen(self) -> bool:
+        """Whether the pest adversary is held fixed for this run."""
+        return self._field.freeze_pest_evolution
 
     def _apply_resistance_frequency(self, frequency: float) -> None:
         """Set initial herbicide resistance frequency across the field."""

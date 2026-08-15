@@ -59,6 +59,13 @@ class PestPopulation(BaseModel):
         description="Tendency to cluster in field margins/cover crops",
     )
     generation_counter: int = Field(default=0, ge=0)
+    evolution_frozen: bool = Field(
+        default=False,
+        description=(
+            "Freeze heritable pest traits. Random draws are still consumed so a "
+            "frozen run stays aligned with an evolving run at the same seed."
+        ),
+    )
 
     @property
     def generation_time(self) -> int:
@@ -102,9 +109,10 @@ class PestPopulation(BaseModel):
     def _select_resistance(self, selection_pressure: float, rng: np.random.Generator) -> None:
         """Shift resistance allele frequency under selection."""
         delta = selection_pressure * 0.02 * (1.0 - self.resistance_freq)
-        self.resistance_freq = float(
-            np.clip(self.resistance_freq + delta + rng.normal(0, 0.005), 0.0, 1.0)
-        )
+        noise = float(rng.normal(0, 0.005))
+        if self.evolution_frozen:
+            return
+        self.resistance_freq = float(np.clip(self.resistance_freq + delta + noise, 0.0, 1.0))
 
     def evolve_behavior(self, rng: np.random.Generator, detection_pressure: float) -> None:
         """Evolve behavioral escape traits in response to detection pressure."""
@@ -113,26 +121,17 @@ class PestPopulation(BaseModel):
             return
         self.generation_counter = 0
         drift = 0.01
+        draws = [float(rng.normal(0, drift)) for _ in range(3)]
+        if self.evolution_frozen:
+            return
         self.night_feeding = float(
-            np.clip(
-                self.night_feeding + detection_pressure * 0.02 + rng.normal(0, drift),
-                0.0,
-                1.0,
-            )
+            np.clip(self.night_feeding + detection_pressure * 0.02 + draws[0], 0.0, 1.0)
         )
         self.underside_preference = float(
-            np.clip(
-                self.underside_preference + detection_pressure * 0.015 + rng.normal(0, drift),
-                0.0,
-                1.0,
-            )
+            np.clip(self.underside_preference + detection_pressure * 0.015 + draws[1], 0.0, 1.0)
         )
         self.edge_refuge = float(
-            np.clip(
-                self.edge_refuge + detection_pressure * 0.01 + rng.normal(0, drift),
-                0.0,
-                1.0,
-            )
+            np.clip(self.edge_refuge + detection_pressure * 0.01 + draws[2], 0.0, 1.0)
         )
 
     def disperse(self, wind_speed: float, rng: np.random.Generator) -> float:

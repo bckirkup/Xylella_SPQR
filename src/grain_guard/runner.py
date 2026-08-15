@@ -24,6 +24,44 @@ _DEFAULT_DOMAIN: dict[str, Any] = {
     "steps": 200,
 }
 
+_INT_ADAPTER_KEYS: tuple[str, ...] = (
+    "n_traps",
+    "n_weather_stations",
+    "n_soil_sensors",
+    "satellite_revisit",
+    "satellite_zone_rows",
+    "satellite_zone_cols",
+    "yield_zones",
+    "engine_max_dim",
+)
+_FLOAT_ADAPTER_KEYS: tuple[str, ...] = (
+    "pest_threshold",
+    "pest_intro_probability",
+    "resistance_initial_frequency",
+)
+_BOOL_ADAPTER_KEYS: tuple[str, ...] = ("freeze_pest_evolution",)
+
+
+def adapter_kwargs_from_config(domain_config: dict[str, Any]) -> dict[str, Any]:
+    """Extract adapter keyword arguments a domain config may override.
+
+    Grid geometry, landscape, and seed are passed separately by the caller.
+    Keys absent from the config keep the adapter's own defaults, so a config
+    that names a sensor count or the pest-evolution freeze is no longer
+    silently dropped.
+    """
+    kwargs: dict[str, Any] = {}
+    for key in _INT_ADAPTER_KEYS:
+        if key in domain_config:
+            kwargs[key] = int(domain_config[key])
+    for key in _FLOAT_ADAPTER_KEYS:
+        if key in domain_config:
+            kwargs[key] = float(domain_config[key])
+    for key in _BOOL_ADAPTER_KEYS:
+        if key in domain_config:
+            kwargs[key] = bool(domain_config[key])
+    return kwargs
+
 
 class GrainDomainHooks:
     domain_name = "grain_guard"
@@ -64,6 +102,7 @@ class GrainDomainHooks:
             grid_cols=int(domain_config.get("grid_cols", 20)),
             landscape=landscape,
             seed=int(domain_config.get("seed", 42)),
+            **adapter_kwargs_from_config(domain_config),
         )
 
     def print_header(self, _adapter: GrainGuardAdapter, run: RunContext) -> None:
