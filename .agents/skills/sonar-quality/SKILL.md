@@ -47,8 +47,8 @@ pytest --strict-markers -ra
     package==version` requirement.
   - `--no-binary-package <package>` may document source-build exceptions, but
     does not replace `--no-build`.
-  - Non-installing commands such as `uv run`, `uv run --no-sync`, `uv lock`, and
-    `uv --version` are not checked by these rules.
+  - `uv run` requires `--no-build`, including when combined with `--no-sync`.
+  - Non-installing commands such as `uv lock` and `uv --version` are not checked.
 
 The mechanical guard is intentionally conservative and checks Python files plus
 workflow YAML. `zizmor` separately checks GitHub Actions action pinning.
