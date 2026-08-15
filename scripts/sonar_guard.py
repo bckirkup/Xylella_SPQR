@@ -29,6 +29,7 @@ _UV_ADD = re.compile(r"(?<![\w-])uv\s+add\b")
 _UV_TOOL_INSTALL = re.compile(r"(?<![\w-])uv\s+tool\s+install\b")
 _UV_TOOL_RUN = re.compile(r"(?<![\w-])uv\s+tool\s+run\b")
 _UVX = re.compile(r"(?<![\w-])uvx\b")
+_UV_RUN = re.compile(r"(?<![\w-])uv\s+run\b")
 _INSTALLER_COMMAND = re.compile(
     "|".join(
         pattern.pattern
@@ -40,6 +41,7 @@ _INSTALLER_COMMAND = re.compile(
             _UV_TOOL_INSTALL,
             _UV_TOOL_RUN,
             _UVX,
+            _UV_RUN,
         )
     )
 )
@@ -89,22 +91,46 @@ def _record_argument_bindings(assignments: dict[str, list[str]], arguments: ast.
 
 
 def _record_local_binding(assignments: dict[str, list[str]], node: ast.AST) -> None:
+    if isinstance(node, ast.Assign | ast.AnnAssign):
+        _record_assignment_binding(assignments, node)
+    elif isinstance(node, ast.AugAssign | ast.For | ast.AsyncFor):
+        _record_loop_binding(assignments, node)
+    elif isinstance(node, ast.With | ast.AsyncWith):
+        _record_context_binding(assignments, node)
+    elif isinstance(node, ast.ExceptHandler):
+        _record_exception_binding(assignments, node)
+    elif isinstance(node, ast.NamedExpr):
+        _record_binding(assignments, node.target, _binding_kind(node.value))
+
+
+def _record_assignment_binding(
+    assignments: dict[str, list[str]], node: ast.Assign | ast.AnnAssign
+) -> None:
     if isinstance(node, ast.Assign):
         for target in node.targets:
             _record_binding(assignments, target, _binding_kind(node.value))
-    elif isinstance(node, ast.AnnAssign):
-        kind = _binding_kind(node.value) if node.value is not None else "other"
-        _record_binding(assignments, node.target, kind)
-    elif isinstance(node, ast.AugAssign | ast.For | ast.AsyncFor):
-        _record_binding(assignments, node.target, "other")
-    elif isinstance(node, ast.With | ast.AsyncWith):
-        for item in node.items:
-            if item.optional_vars is not None:
-                _record_binding(assignments, item.optional_vars, "other")
-    elif isinstance(node, ast.ExceptHandler) and node.name is not None:
+        return
+    kind = _binding_kind(node.value) if node.value is not None else "other"
+    _record_binding(assignments, node.target, kind)
+
+
+def _record_loop_binding(
+    assignments: dict[str, list[str]], node: ast.AugAssign | ast.For | ast.AsyncFor
+) -> None:
+    _record_binding(assignments, node.target, "other")
+
+
+def _record_context_binding(
+    assignments: dict[str, list[str]], node: ast.With | ast.AsyncWith
+) -> None:
+    for item in node.items:
+        if item.optional_vars is not None:
+            _record_binding(assignments, item.optional_vars, "other")
+
+
+def _record_exception_binding(assignments: dict[str, list[str]], node: ast.ExceptHandler) -> None:
+    if node.name is not None:
         assignments.setdefault(node.name, []).append("other")
-    elif isinstance(node, ast.NamedExpr):
-        _record_binding(assignments, node.target, _binding_kind(node.value))
 
 
 def _local_float_bindings(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
@@ -427,6 +453,7 @@ def _uv_command_kind(segment: str) -> str | None:
         ("tool_install", _UV_TOOL_INSTALL),
         ("tool_run", _UV_TOOL_RUN),
         ("tool_run", _UVX),
+        ("run", _UV_RUN),
     ):
         if pattern.match(segment):
             return kind
@@ -448,59 +475,76 @@ def _uv_from_requirements(tokens: list[str]) -> list[str]:
     return requirements
 
 
-def _uv_findings(path: Path, line: int, kind: str, tokens: list[str]) -> list[Finding]:
-    findings: list[Finding] = []
+def _uv_build_finding(path: Path, line: int, tokens: list[str]) -> list[Finding]:
     if "--no-build" not in tokens:
-        findings.append(
+        return [
+            Finding(
+                path, line, "S8541", "uv command must include --no-build for source-build safety"
+            )
+        ]
+    return []
+
+
+def _uv_sync_findings(path: Path, line: int, tokens: list[str]) -> list[Finding]:
+    if "--locked" not in tokens and "--frozen" not in tokens:
+        return [
             Finding(
                 path,
                 line,
-                "S8541",
-                "uv command must include --no-build for source-build safety",
+                "S8544",
+                "uv sync must include --locked or --frozen for pinned resolution",
             )
-        )
+        ]
+    return []
+
+
+def _uv_tool_run_findings(path: Path, line: int, tokens: list[str]) -> list[Finding]:
+    requirements = _uv_from_requirements(tokens)
+    if not requirements or not all(_requirement_is_pinned(req) for req in requirements):
+        return [
+            Finding(
+                path,
+                line,
+                "S8544",
+                "uv tool commands must use a pinned --from requirement",
+            )
+        ]
+    return []
+
+
+def _uv_install_findings(path: Path, line: int, tokens: list[str]) -> list[Finding]:
+    from_requirements = _uv_from_requirements(tokens)
+    if from_requirements:
+        requirements = from_requirements
+    else:
+        local_install = _editable_install_is_local(tokens)
+        if local_install or "--require-hashes" in tokens:
+            return []
+        requirements = _requirement_tokens(tokens)
+    if requirements and not all(_requirement_is_pinned(req) for req in requirements):
+        return [
+            Finding(
+                path,
+                line,
+                "S8544",
+                "uv install requirements must be version-pinned or hashed",
+            )
+        ]
+    return []
+
+
+def _uv_resolution_findings(path: Path, line: int, kind: str, tokens: list[str]) -> list[Finding]:
     if kind == "sync":
-        if "--locked" not in tokens and "--frozen" not in tokens:
-            findings.append(
-                Finding(
-                    path,
-                    line,
-                    "S8544",
-                    "uv sync must include --locked or --frozen for pinned resolution",
-                )
-            )
-        return findings
+        return _uv_sync_findings(path, line, tokens)
     if kind == "tool_run":
-        requirements = _uv_from_requirements(tokens)
-        if not requirements or not all(_requirement_is_pinned(req) for req in requirements):
-            findings.append(
-                Finding(
-                    path,
-                    line,
-                    "S8544",
-                    "uv tool commands must use a pinned --from requirement",
-                )
-            )
-        return findings
+        return _uv_tool_run_findings(path, line, tokens)
     if kind in {"pip_install", "add", "tool_install"}:
-        from_requirements = _uv_from_requirements(tokens)
-        if from_requirements:
-            requirements = from_requirements
-        else:
-            local_install = _editable_install_is_local(tokens)
-            if local_install or "--require-hashes" in tokens:
-                return findings
-            requirements = _requirement_tokens(tokens)
-        if requirements and not all(_requirement_is_pinned(req) for req in requirements):
-            findings.append(
-                Finding(
-                    path,
-                    line,
-                    "S8544",
-                    "uv install requirements must be version-pinned or hashed",
-                )
-            )
-    return findings
+        return _uv_install_findings(path, line, tokens)
+    return []
+
+
+def _uv_findings(path: Path, line: int, kind: str, tokens: list[str]) -> list[Finding]:
+    return _uv_build_finding(path, line, tokens) + _uv_resolution_findings(path, line, kind, tokens)
 
 
 def _uv_command_tokens(kind: str, tokens: list[str]) -> list[str]:
