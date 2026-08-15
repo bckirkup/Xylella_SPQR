@@ -34,12 +34,22 @@ run_single_simulation = run_batch.run_single_simulation
 from baseline_parallel import run_process_pool  # noqa: E402
 
 
+def _safe_output_dir(raw_path: Path) -> Path:
+    """Resolve an output directory without allowing path traversal."""
+    if raw_path.is_absolute() or ".." in raw_path.parts:
+        raise ValueError("output_path must be a relative path without '..'")
+    output_path = (_WORKSPACE_ROOT / raw_path).resolve()
+    if not output_path.is_relative_to(_WORKSPACE_ROOT):
+        raise ValueError("output_path must remain under the workspace root")
+    return output_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("output_path", type=Path)
     args = parser.parse_args()
 
-    out_root = args.output_path
+    out_root = _safe_output_dir(args.output_path)
     out_root.mkdir(parents=True, exist_ok=True)
     scenarios = [
         ("monoculture_baseline", "monoculture"),
