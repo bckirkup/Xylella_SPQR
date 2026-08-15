@@ -104,17 +104,18 @@ agent can receive is not published evidence.
 
 ### Current cap-effect provenance
 
-- Grain source commit: `8e82a05`
+- Grain source commit: `085d463b545db94cd9b058455bc6ed3e10c85453`
 - TattleTots engine commit: `cee59f93f6973fa7fefb2f87dbb40a8ce0095113`
 - Harness: `scripts/run_grain_cap_effect.py`
 - Command:
-  `uv run --frozen python scripts/run_grain_cap_effect.py /home/ubuntu/conformance-audit/grain_cap_effect_1786792274`
+  `uv run --frozen python scripts/run_grain_cap_effect.py ./grain_cap_effect_output`
 - Steps: `800`
 - Seeds: `42–46` (five seeds per arm)
 - Landscapes: monoculture and orchard
 - Caps: `30` and `75`
 - Workers: `5`
-- Raw output: `/home/ubuntu/conformance-audit/grain_cap_effect_1786792274/key.json`
+- Raw per-run output is not committed. Regenerate it with the command above;
+  the output will be written to `./grain_cap_effect_output/key.json`.
 
 Final validator findings:
 

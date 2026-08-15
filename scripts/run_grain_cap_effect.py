@@ -1,21 +1,35 @@
-"""Measure GrainGuard agent precision across stream-dimension caps."""
+"""Measure GrainGuard precision across caps using a sibling TattleTots checkout.
+
+This harness borrows ``run_batch`` and ``baseline_parallel`` from the sibling
+TattleTots repository. By default it expects that checkout at ``../TattleTots``
+relative to this repository's parent workspace. Override the workspace with
+``GRAIN_WORKSPACE_ROOT`` or the TattleTots checkout with
+``GRAIN_TATTLETS_ROOT``.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-experiments = Path("/home/ubuntu/repos/TattleTots/Large Experiments")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_WORKSPACE_ROOT = Path(os.environ.get("GRAIN_WORKSPACE_ROOT", str(_REPO_ROOT.parent))).resolve()
+_TATTLETS_ROOT = Path(
+    os.environ.get("GRAIN_TATTLETS_ROOT", str(_WORKSPACE_ROOT / "TattleTots"))
+).resolve()
+experiments = _TATTLETS_ROOT / "Large Experiments"
 sys.path.insert(0, str(experiments))
 import run_batch  # noqa: E402
 
-run_batch._WORKSPACE_ROOT = Path("/home/ubuntu/repos")
+run_batch._WORKSPACE_ROOT = _WORKSPACE_ROOT
+_repo_name = _REPO_ROOT.name
 run_batch.REPOS["grain_guard"]["default_config"] = (
-    "Xylella-SPQR/configs/tattletots_integration.json"
+    f"{_repo_name}/configs/tattletots_integration.json"
 )
-run_batch.REPOS["grain_guard"]["script"] = "../conformance-audit/run_grain_direct.py"
+run_batch.REPOS["grain_guard"]["script"] = f"{_repo_name}/scripts/run_grain_direct.py"
 run_single_simulation = run_batch.run_single_simulation
 from baseline_parallel import run_process_pool  # noqa: E402
 
