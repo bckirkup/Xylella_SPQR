@@ -70,16 +70,52 @@ satellite feature is deliverable, and the TattleTots conformance suite checks
 declared feature counts against the deliverable ceiling so this class of
 mismatch cannot recur silently.
 
-Raising the cap did not improve agent-level performance. Measured through the
-integrated TattleTots layer (monoculture, 800 steps, seeds 42–46, otherwise
-identical configuration), mean report precision was `0.4715` at cap 30 and
-`0.4423` at cap 75, against a static-prior null of `0.6331` and `0.6624`
-respectively. All ten runs were flagged `initiation_is_degenerate` for
-`precision_not_above_static_prior`. The cap change is therefore justified as
-contract honesty — declared geometry that no agent can receive is not
-published evidence — and not as a performance improvement. Grain's integrated
-population failing to clear its own static-prior null is a separate and larger
-finding, independent of the cap.
+The prior cap-effect measurement was monoculture-only and used an earlier
+engine. It reported mean agent report precision of `0.4715` at cap 30 and
+`0.4423` at cap 75, against static-prior nulls of `0.6331` and `0.6624`,
+respectively. Those values remain as a labeled prior-engine measurement; they
+are not overwritten by the current remeasurement.
+
+The current engine remeasurement adds orchard coverage and uses the same
+800-step, five-seed-per-arm design for caps 30 and 75:
+
+| Landscape | Cap | Mean agent report precision | Mean static-prior null |
+| --- | ---: | ---: | ---: |
+| Monoculture | 30 | 0.4671 | 0.5439 |
+| Monoculture | 75 | 0.5142 | 0.5656 |
+| Orchard | 30 | 0.3682 | 0.4717 |
+| Orchard | 75 | 0.4392 | 0.5347 |
+
+The prior and current measurements differ, and the direction of the cap
+effect is engine-dependent: under the current engine, cap 75 is higher than
+cap 30 by `0.0470` in monoculture and `0.0710` in orchard, but that is not a
+general claim that raising the cap improves performance. Every current arm
+remains below its static-prior null. All 20 current runs were flagged
+`initiation_is_degenerate`; all 20 had
+`grounded_yield_share_below_minimum`, 17 had
+`precision_not_above_static_prior`, and 2 had
+`attention_insolvency_with_capacity_overshoot`. The cap correction therefore
+does not demonstrate competence above the null.
+
+The agent-level arms above are engine-coupled measurements. The 20-seed
+instrument-level table above them is adapter-side and unchanged. The cap
+correction remains justified as contract honesty: declared geometry that no
+agent can receive is not published evidence.
+
+### Current cap-effect provenance
+
+- Grain source commit: `085d463b545db94cd9b058455bc6ed3e10c85453`
+- TattleTots engine commit: `cee59f93f6973fa7fefb2f87dbb40a8ce0095113`
+- Harness: `scripts/run_grain_cap_effect.py`
+- Command:
+  `uv run --frozen python scripts/run_grain_cap_effect.py ./grain_cap_effect_output`
+- Steps: `800`
+- Seeds: `42–46` (five seeds per arm)
+- Landscapes: monoculture and orchard
+- Caps: `30` and `75`
+- Workers: `5`
+- Raw per-run output is not committed. Regenerate it with the command above;
+  the output will be written to `./grain_cap_effect_output/key.json`.
 
 Final validator findings:
 
