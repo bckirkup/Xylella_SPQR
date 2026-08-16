@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from grain_guard.runner import GrainDomainHooks, run_grain_batch, run_grain_simulation
@@ -34,7 +35,7 @@ def main(argv: list[str] | None = None) -> None:
     batch_parser.add_argument("--workers", type=int)
     batch_parser.add_argument("--verbose", action="store_true")
 
-    effective = argv if argv is not None else []
+    effective = argv if argv is not None else sys.argv[1:]
     if effective and effective[0] not in ("sim", "batch", "-h", "--help"):
         effective = ["sim", *effective]
     elif not effective:
