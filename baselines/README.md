@@ -18,7 +18,6 @@ Parallel mode uses **ProcessPoolExecutor** (separate Python worker processes).
 |------|---------|
 | `run_grain_guard_baselines.py` | Parameter scan runner |
 | `grain_guard_baselines_config.json` | Factor levels, seeds, steps |
-| `grain_guard_baselines_results.zip` | Pre-computed results (optional) |
 
 ## Shared utilities
 

@@ -12,13 +12,13 @@ project is `bckirkup_Xylella_SPQR`, with analysis wired through
 ## Local validation
 
 ```bash
-pre-commit run --all-files
-python scripts/sonar_guard.py src tests scripts baselines
-python scripts/sonar_guard.py --workflows .github/workflows
-ruff check src/ tests/ scripts/ baselines/
-ruff format --check src/ tests/ scripts/ baselines/
-mypy src/
-pytest --strict-markers -ra
+uv run --no-sync --no-build pre-commit run --all-files
+uv run --no-sync --no-build python scripts/sonar_guard.py src tests scripts baselines
+uv run --no-sync --no-build python scripts/sonar_guard.py --workflows .github/workflows
+uv run --no-sync --no-build ruff check src/ tests/ scripts/ baselines/
+uv run --no-sync --no-build ruff format --check src/ tests/ scripts/ baselines/
+uv run --no-sync --no-build mypy src/
+uv run --no-sync --no-build pytest --strict-markers -ra
 ```
 
 ## Rule catalog
