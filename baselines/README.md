@@ -6,8 +6,8 @@ Parameter scans using **only** conventional baseline architectures (A0–A3), no
 
 ```bash
 cd D:\TotsFiles
-uv run --no-sync --no-build python Xylella_SPQR/baselines/run_grain_guard_baselines.py --smoke-test
-uv run --no-sync --no-build python Xylella_SPQR/baselines/run_grain_guard_baselines.py --workers 8
+uv run --no-sync --no-build --project Xylella-SPQR python Xylella-SPQR/baselines/run_grain_guard_baselines.py --smoke-test
+uv run --no-sync --no-build --project Xylella-SPQR python Xylella-SPQR/baselines/run_grain_guard_baselines.py --workers 8
 ```
 
 Parallel mode uses **ProcessPoolExecutor** (separate Python worker processes).
