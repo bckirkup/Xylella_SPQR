@@ -6,8 +6,8 @@ Parameter scans using **only** conventional baseline architectures (A0–A3), no
 
 ```bash
 cd D:\TotsFiles
-python Xylella_SPQR/baselines/run_grain_guard_baselines.py --smoke-test
-python Xylella_SPQR/baselines/run_grain_guard_baselines.py --workers 8
+uv run --no-sync --no-build python Xylella_SPQR/baselines/run_grain_guard_baselines.py --smoke-test
+uv run --no-sync --no-build python Xylella_SPQR/baselines/run_grain_guard_baselines.py --workers 8
 ```
 
 Parallel mode uses **ProcessPoolExecutor** (separate Python worker processes).
@@ -27,6 +27,5 @@ Multiprocessing helpers live in `TattleTots/Large Experiments/baseline_parallel.
 ## Prerequisites
 
 ```bash
-pip install -e TattleTots[dev]
-pip install -e Xylella_SPQR[dev]
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
 ```

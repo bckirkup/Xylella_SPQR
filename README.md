@@ -7,12 +7,11 @@ GrainGuard tests whether a self-organizing drone/sensor ecology (BMA) can manage
 ## Quick Start
 
 ```bash
-pip install -e domain-runner[dev]
-pip install -e ".[dev]"
-pre-commit install
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
+uv run --no-sync --no-build pre-commit install
 
-grain-guard sim --layer domain_only --steps 200 --verbose
-grain-guard batch --config configs/batch_example.json
+uv run --no-sync --no-build grain-guard sim --layer domain_only --steps 200 --verbose
+uv run --no-sync --no-build grain-guard batch --config configs/batch_example.json
 ```
 
 ## Architecture
@@ -54,14 +53,13 @@ src/grain_guard/
 Requires TattleTots:
 
 ```bash
-pip install -e TattleTots[dev]
-grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output results.json --verbose
+uv run --no-sync --no-build grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output results.json --verbose
 ```
 
 Legacy:
 
 ```bash
-python scripts/run_with_tattletots.py \
+uv run --no-sync --no-build python scripts/run_with_tattletots.py \
     --config configs/tattletots_integration.json \
     --output results.json \
     --verbose
@@ -74,11 +72,11 @@ See [docs/COORDINATION.md](docs/COORDINATION.md) for full coordination guide, co
 ## Development
 
 ```bash
-ruff check src/ tests/         # Lint
-ruff format --check src/ tests/ # Format check
-mypy src/                       # Type check (strict mode)
-pytest                          # All tests
-pytest -m smoke                 # Smoke tests only
+uv run --no-sync --no-build ruff check src/ tests/         # Lint
+uv run --no-sync --no-build ruff format --check src/ tests/ # Format check
+uv run --no-sync --no-build mypy src/                       # Type check (strict mode)
+uv run --no-sync --no-build pytest                          # All tests
+uv run --no-sync --no-build pytest -m smoke                 # Smoke tests only
 ```
 
 ## Falsification Test (Spec §10)
@@ -92,4 +90,4 @@ BMA must achieve equal or better yield protection with **less total pesticide in
 
 ## License
 
-Apache-2.0
+Apache-2.0 — see [LICENSE](LICENSE).

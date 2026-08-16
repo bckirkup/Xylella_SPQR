@@ -30,9 +30,7 @@ class GrainGuardAdapter(DomainAdapter):
 ## Installation for Coordinated Use
 
 ```bash
-pip install -e /path/to/domain-runner[dev]
-pip install -e /path/to/TattleTots[dev]   # only for --layer tattletots
-pip install -e ".[dev]"
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
 ```
 
 ## Running Modes
@@ -40,8 +38,8 @@ pip install -e ".[dev]"
 ### Domain only (no agent ecology)
 
 ```bash
-grain-guard sim --layer domain_only --steps 200 --landscape monoculture --verbose --json
-grain-guard batch --config configs/batch_example.json
+uv run --no-sync --no-build grain-guard sim --layer domain_only --steps 200 --landscape monoculture --verbose --json
+uv run --no-sync --no-build grain-guard batch --config configs/batch_example.json
 ```
 
 ### Integrated (domain + TattleTots agent ecology + COP dispatch)
@@ -49,10 +47,10 @@ grain-guard batch --config configs/batch_example.json
 COP fusion uses `adapter.score_relevance()` with band-aligned role weighting (see TattleTots `engine/relevance.py`). Requires a current TattleTots install.
 
 ```bash
-grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output integrated_results.json --verbose
+uv run --no-sync --no-build grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output integrated_results.json --verbose
 
 # Legacy
-python scripts/run_with_tattletots.py \
+uv run --no-sync --no-build python scripts/run_with_tattletots.py \
     --config configs/tattletots_integration.json \
     --output integrated_results.json \
     --verbose

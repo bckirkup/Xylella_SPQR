@@ -8,32 +8,30 @@ description: Guide for developing and testing the GrainGuard domain simulation f
 ## Setup
 
 ```bash
-pip install -e domain-runner[dev]
-pip install -e TattleTots[dev]   # only for --layer tattletots
-pip install -e ".[dev]"
-pre-commit install
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
+uv run --no-sync --no-build pre-commit install
 ```
 
 ## Run Simulation
 
 ```bash
-grain-guard sim --layer domain_only --steps 200 --verbose
-grain-guard sim --layer tattletots --config configs/tattletots_integration.json
-grain-guard batch --config configs/batch_example.json
+uv run --no-sync --no-build grain-guard sim --layer domain_only --steps 200 --verbose
+uv run --no-sync --no-build grain-guard sim --layer tattletots --config configs/tattletots_integration.json
+uv run --no-sync --no-build grain-guard batch --config configs/batch_example.json
 
 # Legacy
-grain-guard --steps 200 --verbose
-grain-guard --landscape orchard --steps 100 --json
+uv run --no-sync --no-build grain-guard --steps 200 --verbose
+uv run --no-sync --no-build grain-guard --landscape orchard --steps 100 --json
 ```
 
 ## Validation
 
 ```bash
-ruff check src/ tests/
-ruff format --check src/ tests/
-mypy src/
-pytest
-pytest -m smoke
+uv run --no-sync --no-build ruff check src/ tests/
+uv run --no-sync --no-build ruff format --check src/ tests/
+uv run --no-sync --no-build mypy src/
+uv run --no-sync --no-build pytest
+uv run --no-sync --no-build pytest -m smoke
 ```
 
 ## Module Dependency Order
@@ -70,7 +68,7 @@ The adapter (`adapter/grain_adapter.py`) implements `DomainAdapter`:
 ### Running Integrated Mode
 
 ```bash
-grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output results.json --verbose
+uv run --no-sync --no-build grain-guard sim --layer tattletots --config configs/tattletots_integration.json --output results.json --verbose
 ```
 
 Output conforms to `tattletots.output_schema.SimulationOutput` (unified JSON).
@@ -86,7 +84,7 @@ Standalone baseline comparison files live in `baselines/`:
 ## GPU Acceleration
 
 ```bash
-pip install -e ".[gpu]"  # installs cupy-cuda12x
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev --extra gpu
 ```
 
 Set `"use_gpu": true` in the `"simulation"` section of the integration config.
@@ -97,7 +95,7 @@ Falls back silently to NumPy if CuPy or CUDA is unavailable.
 Generate config variants and run in parallel for large sweeps:
 
 ```bash
-python scripts/run_with_tattletots.py --config <variant>.json --output results/<name>.json
+uv run --no-sync --no-build python scripts/run_with_tattletots.py --config <variant>.json --output results/<name>.json
 ```
 
 Key domain parameters to sweep: `landscape` (monoculture/orchard/intercrop),

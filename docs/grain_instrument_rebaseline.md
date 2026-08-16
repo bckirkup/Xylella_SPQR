@@ -108,7 +108,7 @@ agent can receive is not published evidence.
 - TattleTots engine commit: `cee59f93f6973fa7fefb2f87dbb40a8ce0095113`
 - Harness: `scripts/run_grain_cap_effect.py`
 - Command:
-  `uv run --frozen python scripts/run_grain_cap_effect.py ./grain_cap_effect_output`
+  `uv run --no-sync --no-build python scripts/run_grain_cap_effect.py ./grain_cap_effect_output`
 - Steps: `800`
 - Seeds: `42–46` (five seeds per arm)
 - Landscapes: monoculture and orchard
