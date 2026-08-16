@@ -37,6 +37,8 @@ class AgentRecord:
         offspring: number of offspring observed for this agent.
         reports_issued: reports issued over the observed lifetime.
         correct_reports: correct reports over the observed lifetime.
+        reporter_policy: name of the agent's non-genomic reporter policy, or
+            ``None`` for an ordinary agent using evolved escalation.
     """
 
     agent_id: str
@@ -46,6 +48,7 @@ class AgentRecord:
     offspring: int = 0
     reports_issued: int = 0
     correct_reports: int = 0
+    reporter_policy: str | None = None
 
     @property
     def report_precision(self) -> float:
@@ -79,6 +82,7 @@ class LineageTracker:
                     parent_id=parents[0] if parents else None,
                     first_seen_step=step,
                     escalation_threshold=float(agent.genome.escalation_threshold),
+                    reporter_policy=agent.genome.reporter_policy,
                 )
                 self.records[agent_id] = record
                 parent = self.records.get(record.parent_id or "")
