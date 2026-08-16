@@ -4,23 +4,33 @@ An arm is a (grounded input fraction, seed) pair at otherwise identical
 configuration. The pest adversary is frozen for detector-side arms so a moving
 target cannot hide or fake detector improvement; the pest reference arm is the
 same configuration with the pest loop left evolving.
+
+An arm may also be run with a caller-supplied layer setup, which is how the
+designed-reporter measurement seeds genomes carrying a reporter policy without
+duplicating the arm loop or its metrics.
 """
 
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from domain_runner.types import RunContext
+from tattletots.engine.world import World
 from tattletots.integration.tattletots_layer import TattleTotsLayer
 from tattletots.interface.instrument import validate_instrument
 from tattletots.output_schema import SimulationOutput
 
+from grain_guard.adapter.grain_adapter import GrainGuardAdapter
 from grain_guard.analysis.detector_gradient import LineageTracker
 from grain_guard.analysis.gradient import GradientEstimates
 from grain_guard.analysis.pest_reference import PestTrajectory
 from grain_guard.runner import GrainDomainHooks
+
+LayerSetup = Callable[[GrainGuardAdapter, RunContext], dict[str, Any]]
+"""Builds engine layer state for one arm from its adapter and run context."""
 
 
 @dataclass(frozen=True)
@@ -36,6 +46,11 @@ class ArmSpec:
         freeze_pest_evolution: hold the pest adversary fixed.
         landscape: field landscape name.
         pest_generation_steps: steps per recorded pest generation.
+        reporting_levers: enable the engine's measured reporting-opportunity
+            settings (levers 1 and 2) instead of the engine defaults.
+        pest_intro_probability: per-edge-cell pest introduction probability;
+            ``0.0`` gives a pest-free field, which is how a no-event control
+            window is built.
     """
 
     name: str
@@ -46,10 +61,44 @@ class ArmSpec:
     freeze_pest_evolution: bool = True
     landscape: str = "monoculture"
     pest_generation_steps: int = 14
+    reporting_levers: bool = False
+    pest_intro_probability: float | None = None
 
 
-def _simulation_config(spec: ArmSpec) -> dict[str, Any]:
+@dataclass
+class ArmRun:
+    """Everything one executed arm exposes for measurement.
+
+    Attributes:
+        output: engine and domain metrics for the arm.
+        adapter: the domain adapter the arm ran against.
+        world: the engine world after the final step.
+        tracker: detector-side lineage bookkeeping.
+        pest: pest-side generation snapshots.
+        steps_completed: steps actually run before any early stop.
+    """
+
+    output: SimulationOutput
+    adapter: GrainGuardAdapter
+    world: World
+    tracker: LineageTracker
+    pest: PestTrajectory
+    steps_completed: int
+
+
+def _reporting_lever_config() -> dict[str, Any]:
+    """The engine's measured reporting-opportunity settings (levers 1 and 2)."""
     return {
+        "correct_report_attention_value": 8.0,
+        "false_alarm_break_even_precision": 0.2,
+        "reproduction_merit_ordering": True,
+        "escalation_calibration_in_score_units": True,
+    }
+
+
+def simulation_config(spec: ArmSpec) -> dict[str, Any]:
+    """Engine configuration for one arm."""
+    config: dict[str, Any] = {
         "initial_population": 30,
         "max_population": 80,
         "max_steps": spec.steps,
@@ -64,10 +113,14 @@ def _simulation_config(spec: ArmSpec) -> dict[str, Any]:
         "grounded_input_fraction": spec.grounded_input_fraction,
         "grounded_attractiveness_multiplier": spec.grounded_attractiveness_multiplier,
     }
+    if spec.reporting_levers:
+        config.update(_reporting_lever_config())
+    return config
 
 
-def _domain_config(spec: ArmSpec) -> dict[str, Any]:
-    return {
+def domain_config(spec: ArmSpec) -> dict[str, Any]:
+    """Domain configuration for one arm."""
+    config: dict[str, Any] = {
         "grid_rows": 20,
         "grid_cols": 20,
         "landscape": spec.landscape,
@@ -80,15 +133,19 @@ def _domain_config(spec: ArmSpec) -> dict[str, Any]:
         "engine_max_dim": 75,
         "freeze_pest_evolution": spec.freeze_pest_evolution,
     }
+    if spec.pest_intro_probability is not None:
+        config["pest_intro_probability"] = spec.pest_intro_probability
+    return config
 
 
-def _run_context(spec: ArmSpec) -> RunContext:
+def run_context(spec: ArmSpec) -> RunContext:
+    """Domain-runner run context for one arm."""
     return RunContext(
         steps=spec.steps,
         seed=spec.seed,
-        domain_config=_domain_config(spec),
+        domain_config=domain_config(spec),
         layer="tattletots",
-        simulation_config=_simulation_config(spec),
+        simulation_config=simulation_config(spec),
         verbose=False,
         output_path=None,
     )
@@ -138,10 +195,10 @@ def _estimates_dict(estimates: GradientEstimates | None) -> dict[str, Any]:
     return asdict(estimates) if estimates is not None else {}
 
 
-def _instrument_nulls(spec: ArmSpec) -> dict[str, Any]:
+def instrument_nulls(spec: ArmSpec) -> dict[str, Any]:
     """Instrument-level nulls, measured on a fresh adapter of the same config."""
     hooks = GrainDomainHooks()
-    adapter = hooks.build_adapter(_domain_config(spec))
+    adapter = hooks.build_adapter(domain_config(spec))
     report = validate_instrument(adapter, spec.steps)
     return {
         "static_prior_null": report.static_prior_baseline,
@@ -155,13 +212,18 @@ def _instrument_nulls(spec: ArmSpec) -> dict[str, Any]:
     }
 
 
-def run_arm(spec: ArmSpec) -> SimulationOutput:
-    """Run one arm and return its ``SimulationOutput`` with gradient metrics."""
+def execute_arm(
+    spec: ArmSpec,
+    *,
+    setup: LayerSetup | None = None,
+    observe: Callable[[World, int], None] | None = None,
+) -> ArmRun:
+    """Run one arm and return its output alongside the objects it ran on."""
     hooks = GrainDomainHooks()
-    run = _run_context(spec)
+    run = run_context(spec)
     adapter = hooks.build_adapter(run.domain_config)
     layer = TattleTotsLayer()
-    state = layer.setup(adapter, run)
+    state = setup(adapter, run) if setup is not None else layer.setup(adapter, run)
     tracker = LineageTracker()
     pest = PestTrajectory(generation_steps=spec.pest_generation_steps)
     started = time.time()
@@ -170,6 +232,8 @@ def run_arm(spec: ArmSpec) -> SimulationOutput:
     for step in range(spec.steps):
         events = layer.step(adapter, step, state)
         tracker.observe(state["world"], step)
+        if observe is not None:
+            observe(state["world"], step)
         pest.record(adapter.field, step)
         steps_completed = step + 1
         if events.get("stop"):
@@ -202,6 +266,18 @@ def run_arm(spec: ArmSpec) -> SimulationOutput:
         "report_precision": ecology.precision,
         "static_prior_null_engine": ecology.static_prior_precision,
         "uniform_null_engine": ecology.chance_precision,
-        "instrument": _instrument_nulls(spec),
+        "instrument": instrument_nulls(spec),
     }
-    return output
+    return ArmRun(
+        output=output,
+        adapter=adapter,
+        world=state["world"],
+        tracker=tracker,
+        pest=pest,
+        steps_completed=steps_completed,
+    )
+
+
+def run_arm(spec: ArmSpec) -> SimulationOutput:
+    """Run one arm and return its ``SimulationOutput`` with gradient metrics."""
+    return execute_arm(spec).output
