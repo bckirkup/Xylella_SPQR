@@ -7,10 +7,8 @@ dynamics, competing architectures (A0-A3), and phased deployment scenarios.
 
 ## Setup
 ```bash
-pip install -e domain-runner[dev]
-pip install -e TattleTots[dev]   # only for --layer tattletots
-pip install -e ".[dev]"
-pre-commit install
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
+uv run --no-sync --no-build pre-commit install
 ```
 
 ## Before Editing
@@ -19,13 +17,13 @@ pre-commit install
 ## Validation Commands
 Run these before committing:
 ```bash
-pre-commit run --all-files
-python scripts/sonar_guard.py src tests scripts baselines
-python scripts/sonar_guard.py --workflows .github/workflows
-ruff check src/ tests/ scripts/ baselines/
-ruff format --check src/ tests/ scripts/ baselines/
-mypy src/
-pytest --strict-markers -ra
+uv run --no-sync --no-build pre-commit run --all-files
+uv run --no-sync --no-build python scripts/sonar_guard.py src tests scripts baselines
+uv run --no-sync --no-build python scripts/sonar_guard.py --workflows .github/workflows
+uv run --no-sync --no-build ruff check src/ tests/ scripts/ baselines/
+uv run --no-sync --no-build ruff format --check src/ tests/ scripts/ baselines/
+uv run --no-sync --no-build mypy src/
+uv run --no-sync --no-build pytest --strict-markers -ra
 ```
 
 ## Architecture Rules

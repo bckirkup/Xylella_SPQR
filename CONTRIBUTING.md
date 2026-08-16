@@ -8,8 +8,8 @@ Include a test that fails before your fix and passes after.
 ## Development Setup
 
 ```bash
-pip install -e ".[dev]"
-pre-commit install
+uv sync --locked --no-build --no-binary-package grain-guard --no-binary-package domain-runner --no-binary-package tattletots --extra dev
+uv run --no-sync --no-build pre-commit install
 ```
 
 ## Code Conventions
@@ -24,10 +24,10 @@ pre-commit install
 ## Before Submitting
 
 ```bash
-ruff check src/ tests/
-ruff format --check src/ tests/
-mypy src/
-pytest
+uv run --no-sync --no-build ruff check src/ tests/
+uv run --no-sync --no-build ruff format --check src/ tests/
+uv run --no-sync --no-build mypy src/
+uv run --no-sync --no-build pytest
 ```
 
 All checks must pass.
