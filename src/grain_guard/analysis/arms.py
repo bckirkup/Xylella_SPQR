@@ -47,7 +47,12 @@ class ArmSpec:
         landscape: field landscape name.
         pest_generation_steps: steps per recorded pest generation.
         reporting_levers: enable the engine's measured reporting-opportunity
-            settings (levers 1 and 2) instead of the engine defaults.
+            settings (levers 1-4) instead of the engine defaults.
+        reproduction_correctness_weight: weight of rank in verified correctness,
+            rather than rank in reserve sufficiency, in the reproductive merit
+            the population cap rations by (the engine's lever 5 response gate).
+            Applies only under ``reporting_levers``; ``0.0`` is the
+            reserves-only ordering measured so far.
         pest_intro_probability: per-edge-cell pest introduction probability;
             ``0.0`` gives a pest-free field, which is how a no-event control
             window is built.
@@ -62,6 +67,7 @@ class ArmSpec:
     landscape: str = "monoculture"
     pest_generation_steps: int = 14
     reporting_levers: bool = False
+    reproduction_correctness_weight: float = 0.0
     pest_intro_probability: float | None = None
 
 
@@ -87,7 +93,7 @@ class ArmRun:
 
 
 def _reporting_lever_config() -> dict[str, Any]:
-    """The engine's measured reporting-opportunity settings (levers 1 and 2)."""
+    """The engine's measured reporting-opportunity settings (levers 1-4)."""
     return {
         "correct_report_attention_value": 8.0,
         "false_alarm_break_even_precision": 0.2,
@@ -115,6 +121,7 @@ def simulation_config(spec: ArmSpec) -> dict[str, Any]:
     }
     if spec.reporting_levers:
         config.update(_reporting_lever_config())
+        config["reproduction_correctness_weight"] = spec.reproduction_correctness_weight
     return config
 
 

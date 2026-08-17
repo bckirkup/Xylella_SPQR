@@ -59,6 +59,9 @@ ESCALATION_THRESHOLD_RANGE = (0.05, 0.3)
 MIN_SCORED_REPORTS = 20
 """Fewer reports than this in an arm is reported as unscored, not as precision."""
 
+CLAUSE_2_CORRELATION_THRESHOLD = 0.2
+"""Parent-child reproductive correlation a seed must exceed to clear clause 2."""
+
 
 @dataclass
 class OracleTruthSource:
@@ -279,6 +282,9 @@ def measure_designed_arm(
         "attention_solvency": domain["attention_solvency"],
         "reports_per_adult_lifetime": coupling.get("mean_reports_per_adult"),
         "n_adults": coupling.get("n_adults"),
+        "silent_adult_share": coupling.get("silent_adult_share"),
+        "reproduction_correctness_weight": spec.reproduction_correctness_weight,
+        **_clause_measurements(coupling),
         "detector_parent_child_reproductive_correlation": detector.get(
             "parent_child_reproductive_correlation"
         ),
@@ -293,6 +299,36 @@ def measure_designed_arm(
         "oracle_policy_instances": oracle_policy_instances(run.world),
         "cohorts": _cohort_split(list(run.tracker.records.values())),
     }
+
+
+def _clause_measurements(coupling: dict[str, Any]) -> dict[str, Any]:
+    """The two falsification clauses and the cap that rations reproduction.
+
+    Both clauses are read off the engine's own ``PayoffLedger``: clause 1 is the
+    within-run regression slope of correct-report rate over agent generations at
+    fixed initial parameters, clause 2 is the parent-child correlation in
+    offspring count. ``population_capped_step_share`` is reported next to them
+    because a cap that rarely binds leaves a reproduction ordering with almost
+    nothing to ration.
+    """
+    gate = coupling.get("reproduction_gate", {})
+    return {
+        "clause_1_precision_generation_slope": coupling.get("precision_generation_slope"),
+        "generations_observed": coupling.get("generations_observed"),
+        "clause_2_parent_child_offspring_correlation": coupling.get("corr_parent_child_offspring"),
+        "n_parent_child_pairs": coupling.get("n_parent_child_pairs"),
+        "population_capped_step_share": gate.get("population_capped_step_share"),
+        "reproduction_eligible_share": gate.get("eligible_share"),
+    }
+
+
+def _count_where(records: Sequence[dict[str, Any]], key: str, threshold: float) -> int:
+    """Seeds whose value for ``key`` is present and strictly above ``threshold``."""
+    return sum(
+        1
+        for record in records
+        if isinstance(record.get(key), (int, float)) and float(record[key]) > threshold
+    )
 
 
 def _mean_of(records: Sequence[dict[str, Any]], key: str) -> float | None:
@@ -353,6 +389,29 @@ def summarize_policy_arm(policy_arm: str, records: Sequence[dict[str, Any]]) -> 
         "mean_inferability_precision": _mean_of(records, "inferability_precision"),
         "mean_decoder_precision": _mean_of(records, "decoder_precision"),
         "mean_reports_per_adult_lifetime": _mean_of(records, "reports_per_adult_lifetime"),
+        "mean_silent_adult_share": _mean_of(records, "silent_adult_share"),
+        "mean_population_capped_step_share": _mean_of(records, "population_capped_step_share"),
+        "mean_reproduction_eligible_share": _mean_of(records, "reproduction_eligible_share"),
+        "mean_clause_1_slope": _mean_of(records, "clause_1_precision_generation_slope"),
+        "n_seeds_clause_1_rising": _count_where(
+            records, "clause_1_precision_generation_slope", 0.0
+        ),
+        "mean_generations_observed": _mean_of(records, "generations_observed"),
+        "mean_clause_2_correlation": _mean_of(
+            records, "clause_2_parent_child_offspring_correlation"
+        ),
+        "n_seeds_clause_2_cleared": _count_where(
+            records,
+            "clause_2_parent_child_offspring_correlation",
+            CLAUSE_2_CORRELATION_THRESHOLD,
+        ),
+        "reproduction_correctness_weights": sorted(
+            {
+                float(record["reproduction_correctness_weight"])
+                for record in records
+                if record.get("reproduction_correctness_weight") is not None
+            }
+        ),
         "mean_designed_population_share": _mean_of(records, "designed_population_share"),
         "mean_final_population": _mean_of(records, "final_population"),
         "n_extinct_seeds": sum(1 for record in records if int(record["final_population"]) == 0),

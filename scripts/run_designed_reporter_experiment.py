@@ -24,6 +24,7 @@ from typing import Any
 
 from grain_guard.analysis.arms import ArmSpec
 from grain_guard.analysis.designed_reporter import (
+    CLAUSE_2_CORRELATION_THRESHOLD,
     ESCALATION_THRESHOLD_RANGE,
     INVASION_DESIGNED_FRACTION,
     MIN_SCORED_REPORTS,
@@ -41,6 +42,8 @@ from grain_guard.reporter_policy import (
 DEFAULT_SEEDS = tuple(range(1000, 1021))
 DEFAULT_STEPS = 400
 DEFAULT_GROUNDED_FRACTION = 0.67
+DEFAULT_CORRECTNESS_WEIGHT = 0.0
+"""Response gate off: the population cap rations reproduction by reserves only."""
 JSON_ARTIFACT_NAME = "designed_reporter_measurement.json"
 REPORT_ARTIFACT_NAME = "designed_reporter_measurement.md"
 DEFAULT_OUT_DIR = "docs"
@@ -72,7 +75,8 @@ def arm_spec(policy_arm: str, seed: int, args: argparse.Namespace) -> ArmSpec:
         seed=seed,
         steps=args.steps,
         freeze_pest_evolution=True,
-        reporting_levers=True,
+        reporting_levers=args.payoff_levers,
+        reproduction_correctness_weight=args.correctness_weight,
     )
 
 
@@ -83,9 +87,10 @@ def _run_cell(cell: tuple[ArmSpec, str]) -> dict[str, Any]:
 
 def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
     """Run every policy arm over every seed and pool the results."""
+    policy_arms = tuple(args.policy_arms)
     cells = [
         (arm_spec(policy_arm, seed, args), policy_arm)
-        for policy_arm in POLICY_ARMS
+        for policy_arm in policy_arms
         for seed in args.seeds
     ]
     if args.workers > 1:
@@ -94,7 +99,7 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
     else:
         per_seed = [_run_cell(cell) for cell in cells]
     summaries: list[dict[str, Any]] = []
-    for policy_arm in POLICY_ARMS:
+    for policy_arm in policy_arms:
         arm_records = [record for record in per_seed if record["policy_arm"] == policy_arm]
         summaries.append(summarize_policy_arm(policy_arm, arm_records))
     return {
@@ -104,6 +109,10 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
             "grounded_input_fraction": args.grounded_fraction,
             "grounded_attractiveness_multiplier": args.grounded_multiplier,
             "pest_evolution_frozen": True,
+            "policy_arms": list(policy_arms),
+            "payoff_levers": args.payoff_levers,
+            "reproduction_correctness_weight": args.correctness_weight,
+            "clause_2_correlation_threshold": CLAUSE_2_CORRELATION_THRESHOLD,
             "reporter_policy": GRAIN_REPORTER_POLICY_NAME,
             "reporter_threshold_density": DEFAULT_THRESHOLD_DENSITY,
             "reporter_trap_catch_efficiency": DEFAULT_TRAP_CATCH_EFFICIENCY,
@@ -154,6 +163,14 @@ _ARM_ROWS: tuple[tuple[str, str, str], ...] = (
         "{:.4f}",
     ),
     ("Pest parent-child repro corr", "mean_pest_parent_child_reproductive_correlation", "{:.4f}"),
+    ("Silent-adult share", "mean_silent_adult_share", "{:.4f}"),
+    ("Population-cap binding step share", "mean_population_capped_step_share", "{:.4f}"),
+    ("Reproduction-eligible agent-step share", "mean_reproduction_eligible_share", "{:.4f}"),
+    ("Clause 1: correct-report rate slope per generation", "mean_clause_1_slope", "{:+.5f}"),
+    ("Clause 1: seeds rising", "n_seeds_clause_1_rising", "{:.0f}"),
+    ("Generations observed", "mean_generations_observed", "{:.1f}"),
+    ("Clause 2: parent-child offspring corr", "mean_clause_2_correlation", "{:+.4f}"),
+    ("Clause 2: seeds above threshold", "n_seeds_clause_2_cleared", "{:.0f}"),
 )
 
 
@@ -214,6 +231,9 @@ def _method_lines(config: dict[str, Any]) -> list[str]:
         "  the best-reachable-precision selection.",
         "- No subsidies, grace periods, juvenile discounts, or population floors were added,",
         "  and no domain parameter was tuned for this measurement.",
+        "- `docs/response_gate_measurement.md` reports the same instrument under the engine's",
+        "  payoff levers and the correctness-keyed response gate, against both falsification",
+        "  clauses.",
         "",
     ]
 
@@ -233,6 +253,9 @@ def markdown_report(results: dict[str, Any]) -> str:
         f"- `grounded_input_fraction`: `{config['grounded_input_fraction']}`",
         f"- Pest evolution frozen: `{config['pest_evolution_frozen']}`",
         f"- Designed reporter: `{config['reporter_policy']}`",
+        f"- Payoff levers 1-4 enabled: `{config['payoff_levers']}`",
+        f"- `reproduction_correctness_weight`: `{config['reproduction_correctness_weight']}`",
+        f"- Policy arms: `{', '.join(config['policy_arms'])}`",
         "",
         "## Exploitable margin",
         "",
@@ -277,6 +300,33 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
     parser.add_argument("--grounded-fraction", type=float, default=DEFAULT_GROUNDED_FRACTION)
     parser.add_argument("--grounded-multiplier", type=float, default=1.0)
+    parser.add_argument(
+        "--payoff-levers",
+        action="store_true",
+        help=(
+            "Enable the engine's measured reporting-payoff levers 1-4: verified-correctness"
+            " attention income, merit-ordered reproduction at the population cap, false-alarm"
+            " pricing at reachable precision, and escalation thresholds in score units. Off by"
+            " default, so the committed designed-reporter numbers are unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--correctness-weight",
+        type=float,
+        default=DEFAULT_CORRECTNESS_WEIGHT,
+        help=(
+            "Weight of rank in verified correctness in the reproductive merit the"
+            " population cap rations by (engine lever 5). 0 keeps the reserves-only"
+            " ordering the committed numbers were measured under."
+        ),
+    )
+    parser.add_argument(
+        "--policy-arms",
+        nargs="+",
+        choices=POLICY_ARMS,
+        default=list(POLICY_ARMS),
+        help="Policy arms to run; restrict to spend a seed budget on one arm.",
+    )
     parser.add_argument(
         "--workers",
         type=int,

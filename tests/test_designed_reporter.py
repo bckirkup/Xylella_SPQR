@@ -17,9 +17,10 @@ from tattletots.interface.reporter_policy import (
 )
 
 import grain_guard.reporter_policy
-from grain_guard.analysis.arms import ArmSpec
+from grain_guard.analysis.arms import ArmSpec, simulation_config
 from grain_guard.analysis.designed_reporter import (
     ALL_DESIGNED_ARM,
+    CLAUSE_2_CORRELATION_THRESHOLD,
     INVASION_ARM,
     MIN_SCORED_REPORTS,
     ORACLE_ARM,
@@ -236,10 +237,20 @@ def _record(
     ordinary_reports: int = 100,
     ordinary_correct: int = 50,
     static_prior_null: float = 0.5,
+    clause_1_slope: float = 0.001,
+    clause_2_correlation: float = 0.05,
 ) -> dict[str, Any]:
     return {
         "policy_arm": policy_arm,
         "seed": seed,
+        "reproduction_correctness_weight": 1.0,
+        "silent_adult_share": 0.1,
+        "clause_1_precision_generation_slope": clause_1_slope,
+        "generations_observed": 6,
+        "clause_2_parent_child_offspring_correlation": clause_2_correlation,
+        "n_parent_child_pairs": 120,
+        "population_capped_step_share": 0.8,
+        "reproduction_eligible_share": 0.7,
         "total_reports": designed_reports + ordinary_reports,
         "precision": 0.5,
         "designed_precision": 0.0,
@@ -320,6 +331,97 @@ class TestSummaries:
     def test_summary_requires_at_least_one_seed(self) -> None:
         with pytest.raises(ValueError, match="no seeds recorded"):
             summarize_policy_arm(ALL_DESIGNED_ARM, [])
+
+
+class TestResponseGateConfig:
+    """The response gate is config-gated, default off, and nothing else moves."""
+
+    def _spec(self, **kwargs: Any) -> ArmSpec:
+        return ArmSpec(name="gate", grounded_input_fraction=0.67, seed=5, steps=25, **kwargs)
+
+    def test_default_arm_leaves_the_gate_closed(self) -> None:
+        assert self._spec().reproduction_correctness_weight == pytest.approx(0.0)
+        levered = simulation_config(self._spec(reporting_levers=True))
+        assert levered["reproduction_correctness_weight"] == pytest.approx(0.0)
+        assert levered["reproduction_merit_ordering"] is True
+
+    @pytest.mark.parametrize("weight", [0.0, 0.25, 0.5, 1.0])
+    def test_weight_reaches_the_engine_config_unchanged(self, weight: float) -> None:
+        config = simulation_config(
+            self._spec(reporting_levers=True, reproduction_correctness_weight=weight)
+        )
+        assert config["reproduction_correctness_weight"] == pytest.approx(weight)
+
+    def test_the_weight_is_the_only_difference_between_arms(self) -> None:
+        control = simulation_config(self._spec(reporting_levers=True))
+        treatment = simulation_config(
+            self._spec(reporting_levers=True, reproduction_correctness_weight=1.0)
+        )
+        differing = {key for key in control | treatment if control.get(key) != treatment.get(key)}
+        assert differing == {"reproduction_correctness_weight"}
+
+    def test_without_the_levers_the_engine_keeps_its_own_default(self) -> None:
+        config = simulation_config(self._spec(reproduction_correctness_weight=1.0))
+        assert "reproduction_correctness_weight" not in config
+        assert "reproduction_merit_ordering" not in config
+
+
+class TestClauseSummaries:
+    """Rising-seed and cleared-seed counts follow the per-seed values."""
+
+    def _summary(self, slopes: list[float], correlations: list[float]) -> dict[str, Any]:
+        records = [
+            _record(
+                ORDINARY_ARM,
+                seed=seed,
+                designed_reports=0,
+                designed_correct=0,
+                clause_1_slope=slope,
+                clause_2_correlation=correlation,
+            )
+            for seed, (slope, correlation) in enumerate(zip(slopes, correlations, strict=True))
+        ]
+        return summarize_policy_arm(ORDINARY_ARM, records)
+
+    @pytest.mark.parametrize(
+        ("slopes", "expected_rising"),
+        [
+            ([-0.01, -0.02, -0.03, -0.04], 0),
+            ([-0.01, 0.0, 0.002, 0.004], 2),
+            ([0.001, 0.002, 0.003, 0.004], 4),
+        ],
+    )
+    def test_rising_seed_count_tracks_the_slopes(
+        self, slopes: list[float], expected_rising: int
+    ) -> None:
+        summary = self._summary(slopes, [0.0] * len(slopes))
+        assert summary["n_seeds_clause_1_rising"] == expected_rising
+        assert summary["mean_clause_1_slope"] == pytest.approx(sum(slopes) / len(slopes))
+
+    @pytest.mark.parametrize(
+        ("correlations", "expected_cleared"),
+        [
+            ([0.0, 0.1, 0.19, -0.3], 0),
+            ([0.0, 0.21, 0.4, 0.19], 2),
+            ([0.25, 0.3, 0.35, 0.4], 4),
+        ],
+    )
+    def test_cleared_seed_count_tracks_the_threshold(
+        self, correlations: list[float], expected_cleared: int
+    ) -> None:
+        summary = self._summary([0.0] * len(correlations), correlations)
+        assert summary["n_seeds_clause_2_cleared"] == expected_cleared
+        assert summary["mean_clause_2_correlation"] == pytest.approx(
+            sum(correlations) / len(correlations)
+        )
+
+    def test_a_seed_exactly_at_the_threshold_does_not_clear_it(self) -> None:
+        summary = self._summary([0.0], [CLAUSE_2_CORRELATION_THRESHOLD])
+        assert summary["n_seeds_clause_2_cleared"] == 0
+
+    def test_swept_weights_are_recorded_on_the_arm(self) -> None:
+        summary = self._summary([0.0, 0.0], [0.0, 0.0])
+        assert summary["reproduction_correctness_weights"] == [1.0]
 
 
 class TestExploitableMargin:
@@ -418,6 +520,26 @@ class TestMeasuredArms:
         assert record["cohorts"]["n_designed_agents"] == 0
         assert record["evidence_rates"]["decision_steps"] == pytest.approx(0.0)
         assert 0.0 <= record["ordinary_precision"] <= 1.0
+
+    @pytest.mark.parametrize("weight", [0.0, 0.5, 1.0])
+    def test_clause_metrics_stay_inside_their_bounds(self, weight: float) -> None:
+        spec = ArmSpec(
+            name="designed_test",
+            grounded_input_fraction=0.67,
+            seed=7,
+            steps=25,
+            reporting_levers=True,
+            reproduction_correctness_weight=weight,
+        )
+        record = measure_designed_arm(spec, ORDINARY_ARM)
+        assert record["reproduction_correctness_weight"] == pytest.approx(weight)
+        assert math.isfinite(float(record["clause_1_precision_generation_slope"]))
+        assert -1.0 <= float(record["clause_2_parent_child_offspring_correlation"]) <= 1.0
+        assert 0.0 <= float(record["population_capped_step_share"]) <= 1.0
+        assert 0.0 <= float(record["reproduction_eligible_share"]) <= 1.0
+        assert 0.0 <= float(record["silent_adult_share"]) <= 1.0
+        assert int(record["generations_observed"]) >= 1
+        assert int(record["n_parent_child_pairs"]) >= 0
 
     def test_invasion_arm_seeds_a_designed_minority(self) -> None:
         record = measure_designed_arm(self._spec(), INVASION_ARM)

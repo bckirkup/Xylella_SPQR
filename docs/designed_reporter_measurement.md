@@ -65,3 +65,6 @@ The evolved (ordinary) arm stays below the static-prior null.
   the best-reachable-precision selection.
 - No subsidies, grace periods, juvenile discounts, or population floors were added,
   and no domain parameter was tuned for this measurement.
+- `docs/response_gate_measurement.md` reports the same instrument under the engine's
+  payoff levers and the correctness-keyed response gate, against both falsification
+  clauses.
