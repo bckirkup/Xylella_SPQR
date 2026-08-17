@@ -61,6 +61,32 @@ Two traps when tamper-testing a registered reporter policy:
   threshold gives zero designed reports, and a zero threshold gives many
   designed reports of which none are correct.
 
+## Prove a config-gated engine lever is really wired
+
+When an `ArmSpec` field (e.g. `reproduction_correctness_weight`, the lever-5
+response gate) is forwarded into `SimulationConfig`, three checks separate
+"wired" from "silently dropped":
+
+1. **Default-off**: `simulation_config(ArmSpec(reporting_levers=False, <field>=1.0))`
+   must contain none of the lever keys, and
+   `SimulationConfig(**run_context(spec).simulation_config)` must equal the
+   engine's own default for the field. `SimulationConfig` has no `extra=forbid`,
+   so a misspelled key would be silently ignored — always assert on the
+   constructed engine object, not just on the dict.
+2. **One-key diff**: the config dicts at two lever values must differ in exactly
+   that one key (`{k for k in a|b if a.get(k)!=b.get(k)}`).
+3. **Graded runtime sensitivity plus a determinism control**: sweep a few values
+   (0, 0.25, 0.5, 1.0) on one seed at ~120 steps and require several distinct
+   output tuples (precision, clause-1 slope, clause-2 correlation), *and* rerun
+   one value twice and require bit-identical output. Without the control, run-to-run
+   noise reads as lever sensitivity.
+
+Tamper-test module-level thresholds (e.g. `CLAUSE_2_CORRELATION_THRESHOLD`) by
+reassigning the module attribute and re-calling `summarize_policy_arm` — the
+count functions read the global at call time, so this works and the count must
+move. Do it on both synthetic boundary records (`0.199 / 0.2 / 0.2000001`, to
+pin down strict `>`) and on real `per_seed` blocks from a scratch run.
+
 ## Audit the ground-truth boundary both ways
 
 - Structurally: assert the feasible-reporter module's own source never names a
@@ -104,3 +130,15 @@ uv run --no-sync --no-build python scripts/sonar_guard.py --workflows .github/wo
 
 Keep harness tests to short windows (25-40 steps) so the suite stays minutes,
 not hours.
+
+## Spot-check a committed measurement instead of rerunning it
+
+A published table (e.g. `docs/response_gate_measurement.md`) may be 20 seeds ×
+600 steps per arm — hours to rerun. Reproducing *one* per-seed row is enough and
+costs ~90 s per cell at 600 steps: call `measure_designed_arm` directly with the
+same `ArmSpec` and compare the printed slope/correlation/precision/cap-share to
+the row. Runs are deterministic per seed, so an exact match is the expectation;
+any drift means the committed numbers are stale.
+
+Note `scratch_*` output directories are **not** in `.gitignore`, so they show up
+as untracked files in `git status`. Delete them when done.
