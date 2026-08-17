@@ -80,6 +80,9 @@ def _results(best_precision: float, ordinary_precision: float) -> dict[str, Any]
             "steps": 400,
             "grounded_input_fraction": 0.67,
             "pest_evolution_frozen": True,
+            "policy_arms": ["ordinary", "all_designed_seed"],
+            "payoff_levers": False,
+            "reproduction_correctness_weight": 0.0,
             "reporter_policy": "grain_trap_drone_evidence",
             "reporter_threshold_density": 10.0,
             "min_scored_reports": 20,
@@ -87,6 +90,23 @@ def _results(best_precision: float, ordinary_precision: float) -> dict[str, Any]
         "margin": margin,
         "arms": [_arm("ordinary", ordinary_precision), _arm("all_designed_seed", best_precision)],
     }
+
+
+class TestPayoffLeverFlags:
+    """The payoff levers stay off unless asked for, so committed numbers hold."""
+
+    def test_defaults_leave_the_levers_and_the_gate_off(self) -> None:
+        args = SCRIPT._parse_args([])
+        assert args.payoff_levers is False
+        assert args.correctness_weight == pytest.approx(0.0)
+        assert SCRIPT.arm_spec("ordinary", 1000, args).reporting_levers is False
+
+    @pytest.mark.parametrize("weight", [0.0, 0.5, 1.0])
+    def test_requested_levers_and_weight_reach_the_arm_spec(self, weight: float) -> None:
+        args = SCRIPT._parse_args(["--payoff-levers", "--correctness-weight", str(weight)])
+        spec = SCRIPT.arm_spec("ordinary", 1000, args)
+        assert spec.reporting_levers is True
+        assert spec.reproduction_correctness_weight == pytest.approx(weight)
 
 
 class TestMarkdownReport:
