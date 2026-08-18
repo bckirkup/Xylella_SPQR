@@ -64,6 +64,12 @@ class CropCell(BaseModel):
         default=1.0, ge=0.0, le=1.0, description="Fraction of max yield achievable"
     )
     soil_moisture: float = Field(default=0.5, ge=0.0, le=1.0, description="Soil moisture fraction")
+    abiotic_stress: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Drought or nutrient stress independent of pest damage",
+    )
     is_cover_crop: bool = Field(
         default=False, description="Whether this cell is a cover crop alley (beneficial habitat)"
     )

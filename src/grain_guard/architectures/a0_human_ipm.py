@@ -59,7 +59,7 @@ class HumanIPM(Architecture):
                 if observed_above and weather.is_spray_safe:
                     n_sprays += 1.0
                     spray_volume += 2.0
-                    field.pests[r][c].apply_pesticide(self.spray_efficacy, self.rng)
+                    field.apply_pesticide(r, c, self.spray_efficacy, self.rng)
                     if not actual_above:
                         false_sprays += 1.0
                 elif actual_above:

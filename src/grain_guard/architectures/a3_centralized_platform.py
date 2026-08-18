@@ -79,7 +79,9 @@ class CentralizedPlatform(Architecture):
             should_treat=treat_pest and weather.is_spray_safe,
             volume=1.0,
             actual_problem=actual_pest_problem,
-            application=lambda: pest.apply_pesticide(
+            application=lambda: field.apply_pesticide(
+                row,
+                col,
                 max(
                     0.1,
                     self.spray_efficacy

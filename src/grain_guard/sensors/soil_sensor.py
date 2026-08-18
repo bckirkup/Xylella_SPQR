@@ -25,7 +25,11 @@ class SoilSensor(BaseModel):
         """
         moisture = float(np.clip(crop.soil_moisture + rng.normal(0, 0.02), 0.0, 1.0))
         temp_proxy = 20.0 + (1.0 - crop.soil_moisture) * 10.0 + float(rng.normal(0, 1.0))
-        conductivity = 0.5 * crop.soil_moisture + float(rng.normal(0, 0.05))
+        conductivity = (
+            0.5 * crop.soil_moisture
+            + 0.25 * (1.0 - crop.abiotic_stress)
+            + float(rng.normal(0, 0.05))
+        )
         return np.array([moisture, temp_proxy, max(0.0, conductivity)], dtype=np.float64)
 
     @property

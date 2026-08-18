@@ -21,7 +21,8 @@ from tattletots.models.response_outcome import ResponseOutcome
 from tattletots.models.stream import Stream, StreamType
 from tattletots.models.user import User
 
-from grain_guard.environment.field import CropField, LandscapeType
+from grain_guard.environment.field import CropField, EcologyConfig, LandscapeType
+from grain_guard.environment.pest import PestPopulation
 from grain_guard.environment.weather import AgWeather
 from grain_guard.sensors.drone_imagery import DroneImager
 from grain_guard.sensors.pheromone_trap import PheromoneTrap
@@ -117,6 +118,7 @@ class GrainGuardAdapter(DomainAdapter):
         pest_intro_probability: float = 0.02,
         resistance_initial_frequency: float = 0.01,
         freeze_pest_evolution: bool = False,
+        ecology_config: EcologyConfig | dict[str, object] | None = None,
         seed: int = 42,
     ) -> None:
         self.rng = np.random.default_rng(seed)
@@ -124,6 +126,7 @@ class GrainGuardAdapter(DomainAdapter):
             rows=grid_rows,
             cols=grid_cols,
             landscape=landscape,
+            ecology=EcologyConfig.model_validate(ecology_config or {}),
             freeze_pest_evolution=freeze_pest_evolution,
         )
         self._pest_intro_probability = pest_intro_probability
@@ -163,6 +166,7 @@ class GrainGuardAdapter(DomainAdapter):
         for r in range(self._field.rows):
             for c in range(self._field.cols):
                 self._field.pests[r][c].resistance_freq = frequency
+                self._field.secondary_pests[r][c].resistance_freq = frequency
                 self._field.weeds[r][c].resistance_freq = frequency
 
     # ------------------------------------------------------------------
@@ -539,7 +543,7 @@ class GrainGuardAdapter(DomainAdapter):
         """Apply spot-spray pesticide at a field cell."""
         if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
             return
-        self._field.pests[row][col].apply_pesticide(SPRAY_EFFICACY, self.rng)
+        self._field.apply_pesticide(row, col, SPRAY_EFFICACY, self.rng)
 
     def get_responder_user_id(self) -> str:
         """Agronomist authorizes field spray dispatch."""
@@ -604,7 +608,7 @@ class GrainGuardAdapter(DomainAdapter):
         """Pest density at a field cell."""
         if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
             return 0.0
-        return float(self._field.pests[row][col].density)
+        return self._field.cell_pest_density(row, col)
 
     # ------------------------------------------------------------------
     # Internal simulation helpers
@@ -694,7 +698,7 @@ class GrainGuardAdapter(DomainAdapter):
         drone_row, drone_col = self._drone_location(time_step)
         drone_observation = self._drone_imager.observe(
             self._field.crops[drone_row][drone_col],
-            self._field.pests[drone_row][drone_col],
+            self._observable_pest(drone_row, drone_col),
             self._field.weeds[drone_row][drone_col],
             self.rng,
         )
@@ -754,6 +758,15 @@ class GrainGuardAdapter(DomainAdapter):
                     dtype="<U8",
                 ),
             )
+
+    def _observable_pest(self, row: int, col: int) -> PestPopulation:
+        """Pest signal visible to imagery, including the secondary species."""
+        primary = self._field.pests[row][col]
+        if not self._field.ecology.enabled:
+            return primary
+        observable = primary.clone()
+        observable.density = self._field.cell_pest_density(row, col)
+        return observable
 
     def _drone_location(self, time_step: int) -> tuple[int, int]:
         """Return a deterministic geography-only flight-plan location."""
