@@ -36,7 +36,7 @@ class DroneImager(BaseModel):
         """
         pest_signal = pest.density * pest.detectability + float(rng.normal(0, self.detection_noise))
         weed_signal = weed.detectability + float(rng.normal(0, self.detection_noise))
-        stress_signal = 1.0 - crop.health + float(rng.normal(0, self.detection_noise))
+        stress_signal = 1.0 - crop.effective_health + float(rng.normal(0, self.detection_noise))
         thermal = (1.0 - crop.soil_moisture) * 0.5 + float(rng.normal(0, self.detection_noise))
         return np.array(
             [

@@ -70,6 +70,16 @@ class CropCell(BaseModel):
         le=1.0,
         description="Drought or nutrient stress independent of pest damage",
     )
+    abiotic_vigor_weight: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How strongly current abiotic stress discounts observable vigor. The "
+            "discount is reversible: it disappears when the stress lifts, so "
+            "drought suppresses the crop without permanently damaging it."
+        ),
+    )
     is_cover_crop: bool = Field(
         default=False, description="Whether this cell is a cover crop alley (beneficial habitat)"
     )
@@ -91,6 +101,25 @@ class CropCell(BaseModel):
         self.yield_potential = max(0.0, self.yield_potential - damage * 0.8)
 
     @property
+    def _abiotic_discount(self) -> float:
+        return max(0.0, 1.0 - self.abiotic_vigor_weight * self.abiotic_stress)
+
+    @property
+    def effective_health(self) -> float:
+        """Health after reversible abiotic suppression.
+
+        Pest and weed damage is cumulative and permanent; drought stress is not.
+        It suppresses the standing crop while the soil is dry and releases the
+        crop again once moisture returns.
+        """
+        return self.health * self._abiotic_discount
+
+    @property
+    def effective_yield_potential(self) -> float:
+        """Yield potential after reversible abiotic suppression."""
+        return self.yield_potential * self._abiotic_discount
+
+    @property
     def ndvi_proxy(self) -> float:
         """Simulated NDVI signal: healthy vegetation → high, stressed → low."""
         base = {
@@ -101,4 +130,4 @@ class CropCell(BaseModel):
             GrowthStage.MATURE: 0.4,
             GrowthStage.HARVESTED: 0.15,
         }
-        return base[self.growth_stage] * self.health
+        return base[self.growth_stage] * self.effective_health

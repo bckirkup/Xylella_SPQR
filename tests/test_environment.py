@@ -332,6 +332,87 @@ class TestCoupledEcology:
         assert np.all(field.biological_control >= 0.0)
 
 
+class TestRecoverableAbioticStress:
+    """Drought suppresses the standing crop reversibly instead of ratcheting it down."""
+
+    def test_vigor_weight_grades_observable_suppression(self) -> None:
+        weights = (0.0, 0.3, 0.6, 0.9)
+        observed = [
+            CropCell(
+                health=1.0,
+                abiotic_stress=0.8,
+                abiotic_vigor_weight=weight,
+                growth_stage=GrowthStage.FLOWERING,
+            )
+            for weight in weights
+        ]
+        health = [cell.effective_health for cell in observed]
+        ndvi = [cell.ndvi_proxy for cell in observed]
+        assert health == sorted(health, reverse=True)
+        assert ndvi == sorted(ndvi, reverse=True)
+        assert health[0] - health[-1] > 0.2
+        assert all(0.0 <= value <= 1.0 for value in health)
+
+    def test_drought_suppression_reverses_when_the_soil_rewets(self) -> None:
+        """The point of the fix: the same cell recovers once moisture returns.
+
+        A one-way damage ratchet would leave both the underlying health and the
+        observable vigor permanently lower after the dry spell.
+        """
+        dry = AgWeather(temperature=30.0, solar_radiation=25.0, precipitation=0.0)
+        wet = AgWeather(temperature=30.0, solar_radiation=25.0, precipitation=50.0)
+        field = CropField(rows=4, cols=4)
+        rng = np.random.default_rng(11)
+        for _ in range(30):
+            field.step(dry, rng)
+        drought_vigor = field.mean_crop_health()
+        for _ in range(30):
+            field.step(wet, rng)
+        recovered_vigor = field.mean_crop_health()
+        underlying = [cell.health for row in field.crops for cell in row]
+        assert drought_vigor < 0.7
+        assert recovered_vigor > 0.95
+        assert min(underlying) > 0.99
+
+    def test_pest_free_field_keeps_its_health_over_a_long_dry_run(self) -> None:
+        dry = AgWeather(temperature=30.0, solar_radiation=25.0, precipitation=0.0)
+        field = CropField(rows=4, cols=4)
+        rng = np.random.default_rng(5)
+        for _ in range(200):
+            field.step(dry, rng)
+        underlying = [cell.health for row in field.crops for cell in row]
+        yields = [cell.yield_potential for row in field.crops for cell in row]
+        assert min(underlying) > 0.99
+        assert min(yields) > 0.99
+
+    def test_drought_lowers_pest_carrying_capacity_without_damaging_the_crop(self) -> None:
+        densities: list[float] = []
+        for stress in (0.0, 0.5, 1.0):
+            field = CropField(rows=1, cols=1, ecology=EcologyConfig(primary_predation_rate=0.0))
+            field.crops[0][0].abiotic_stress = stress
+            field.pests[0][0].density = 20.0
+            field.biological_control[0] = 0.0
+            field._advance_pests(np.random.default_rng(6))
+            densities.append(field.pests[0][0].density)
+        assert densities[0] > densities[1] > densities[2]
+        assert densities[0] - densities[2] > 0.5
+
+    def test_effective_state_stays_bounded_and_finite(self) -> None:
+        field = CropField(rows=5, cols=5)
+        rng = np.random.default_rng(23)
+        field.stochastic_pest_introduction(rng, probability=1.0)
+        for _ in range(40):
+            field.step(AgWeather(temperature=28.0, precipitation=0.0), rng)
+        cells = [cell for row in field.crops for cell in row]
+        vigor = [cell.effective_health for cell in cells]
+        realized = [cell.effective_yield_potential for cell in cells]
+        assert all(np.isfinite(value) for value in vigor)
+        assert all(0.0 <= value <= 1.0 for value in vigor)
+        assert all(np.isfinite(value) for value in realized)
+        assert all(0.0 <= value <= 1.0 for value in realized)
+        assert all(value <= cell.health for value, cell in zip(vigor, cells, strict=True))
+
+
 class TestLegacyEcologyControl:
     """Negative controls: with the coupling off, none of the new costs apply."""
 
@@ -359,3 +440,15 @@ class TestLegacyEcologyControl:
         assert field.total_pest_density() == pytest.approx(field.total_primary_pest_density())
         stress = [cell.abiotic_stress for row in field.crops for cell in row]
         assert stress == pytest.approx([0.0] * len(stress))
+
+    def test_observable_vigor_equals_raw_health(self) -> None:
+        field = CropField(rows=3, cols=3, ecology=EcologyConfig(enabled=False))
+        rng = np.random.default_rng(31)
+        field.stochastic_pest_introduction(rng, probability=1.0)
+        for _ in range(20):
+            field.step(AgWeather(temperature=30.0, precipitation=0.0), rng)
+        cells = [cell for row in field.crops for cell in row]
+        assert all(cell.abiotic_vigor_weight == pytest.approx(0.0) for cell in cells)
+        assert field.mean_crop_health() == pytest.approx(
+            sum(cell.health for cell in cells) / len(cells)
+        )
