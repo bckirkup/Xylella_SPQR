@@ -49,7 +49,7 @@ class YieldMonitor(BaseModel):
             for r in range(r_start, max(r_end, r_start + 1)):
                 for c in range(cols):
                     if r < rows:
-                        zone_yield += crops[r][c].yield_potential
+                        zone_yield += crops[r][c].effective_yield_potential
                         zone_count += 1
             avg = zone_yield / max(zone_count, 1)
             zone_yields.append(avg + float(rng.normal(0, 0.02)))

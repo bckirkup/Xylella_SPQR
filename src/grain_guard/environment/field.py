@@ -33,9 +33,25 @@ class EcologyConfig(BaseModel):
     beneficial_recolonization_rate: float = Field(default=0.08, ge=0.0, le=1.0)
     beneficial_noise: float = Field(default=0.1, ge=0.0)
     drought_threshold: float = Field(default=0.42, gt=0.0, le=1.0)
-    drought_damage_rate: float = Field(default=0.003, ge=0.0)
+    abiotic_vigor_weight: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Reversible suppression of crop vigor at full drought stress. Drought "
+            "never writes permanent damage, so a rewetted cell recovers."
+        ),
+    )
     secondary_intro_fraction: float = Field(default=0.2, ge=0.0)
     secondary_growth_multiplier: float = Field(default=2.0, ge=0.0)
+    secondary_crop_damage_multiplier: float = Field(
+        default=0.2,
+        ge=0.0,
+        description=(
+            "Per-capita crop damage of the secondary pest relative to its species "
+            "default. This keeps enemy release from immediately starving itself."
+        ),
+    )
     introduction_patch_radius: int = Field(default=1, ge=0, le=3)
 
 
@@ -84,7 +100,14 @@ class CropField(BaseModel):
             self.biological_control = np.full(self.rows * self.cols, 5.0)
         if self.abiotic_susceptibility.size == 0:
             self.abiotic_susceptibility = self._initial_abiotic_susceptibility()
+        self._apply_abiotic_vigor_weight()
         self.apply_pest_evolution_freeze(self.freeze_pest_evolution)
+
+    def _apply_abiotic_vigor_weight(self) -> None:
+        weight = self.ecology.abiotic_vigor_weight if self.ecology.enabled else 0.0
+        for row in self.crops:
+            for crop in row:
+                crop.abiotic_vigor_weight = weight
 
     def apply_pest_evolution_freeze(self, frozen: bool) -> None:
         """Freeze or unfreeze heritable pest traits across every cell."""
@@ -228,10 +251,12 @@ class CropField(BaseModel):
                 crop.abiotic_stress = self._abiotic_stress(r, c, crop.soil_moisture)
                 pest_damage = self.pests[r][c].damage_rate
                 if self.ecology.enabled:
-                    pest_damage += self.secondary_pests[r][c].damage_rate
+                    pest_damage += (
+                        self.secondary_pests[r][c].damage_rate
+                        * self.ecology.secondary_crop_damage_multiplier
+                    )
                 weed_damage = self.weeds[r][c].competition_factor * 0.01
-                abiotic_damage = crop.abiotic_stress * self.ecology.drought_damage_rate
-                crop.apply_damage(pest_damage + weed_damage + abiotic_damage)
+                crop.apply_damage(pest_damage + weed_damage)
 
     def _abiotic_stress(self, r: int, c: int, moisture: float) -> float:
         if not self.ecology.enabled:
@@ -247,7 +272,7 @@ class CropField(BaseModel):
         for r in range(self.rows):
             for c in range(self.cols):
                 primary = self.pests[r][c]
-                crop_health = self.crops[r][c].health
+                crop_health = self.crops[r][c].effective_health
                 primary.grow(rng, crop_health * growth_modifier)
                 if self.ecology.enabled:
                     secondary = self.secondary_pests[r][c]
@@ -404,12 +429,16 @@ class CropField(BaseModel):
         return sum(self.weeds[r][c].density for r in range(self.rows) for c in range(self.cols))
 
     def mean_crop_health(self) -> float:
-        total = sum(self.crops[r][c].health for r in range(self.rows) for c in range(self.cols))
+        total = sum(
+            self.crops[r][c].effective_health for r in range(self.rows) for c in range(self.cols)
+        )
         return total / (self.rows * self.cols)
 
     def mean_yield_potential(self) -> float:
         total = sum(
-            self.crops[r][c].yield_potential for r in range(self.rows) for c in range(self.cols)
+            self.crops[r][c].effective_yield_potential
+            for r in range(self.rows)
+            for c in range(self.cols)
         )
         return total / (self.rows * self.cols)
 

@@ -49,6 +49,24 @@ class TestDroneImager:
         obs = d.observe(CropCell(), PestPopulation(), WeedPopulation(), rng)
         assert all(v >= 0 for v in obs)
 
+    def test_drought_and_pest_damage_produce_the_same_stress_band(self) -> None:
+        """Reversible drought suppression still has to look like pest damage.
+
+        A drought cell at full health and a pest-damaged cell with the same
+        observable vigor must land in the same imagery stress band, otherwise
+        "damage implies pest" is free again.
+        """
+        imager = DroneImager(detection_noise=0.0)
+        rng = np.random.default_rng(0)
+        drought = CropCell(health=1.0, abiotic_stress=0.5, abiotic_vigor_weight=0.6)
+        chewed = CropCell(health=0.7)
+        healthy = CropCell(health=1.0)
+        drought_stress = imager.observe(drought, PestPopulation(), WeedPopulation(), rng)[2]
+        pest_stress = imager.observe(chewed, PestPopulation(), WeedPopulation(), rng)[2]
+        healthy_stress = imager.observe(healthy, PestPopulation(), WeedPopulation(), rng)[2]
+        assert abs(drought_stress - pest_stress) < 0.05
+        assert drought_stress - healthy_stress > 0.2
+
 
 class TestPheromoneTrap:
     def test_observe_shape(self) -> None:
