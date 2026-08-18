@@ -391,7 +391,10 @@ class TestRecoverableAbioticStress:
             field = CropField(
                 rows=1,
                 cols=1,
-                ecology=EcologyConfig(secondary_crop_damage_multiplier=multiplier),
+                ecology=EcologyConfig(
+                    secondary_crop_damage_multiplier=multiplier,
+                    pest_damage_visibility_lag_steps=0,
+                ),
             )
             field.secondary_pests[0][0].density = 100.0
             field._advance_crops(AgWeather())
@@ -427,8 +430,66 @@ class TestRecoverableAbioticStress:
         assert all(value <= cell.health for value, cell in zip(vigor, cells, strict=True))
 
 
+class TestLaggedIrreversibleDamage:
+    """Pest injury is committed before crop/spectral damage reveals it."""
+
+    def test_visibility_lag_grades_time_to_damage(self) -> None:
+        reveal_steps: list[int] = []
+        for lag_steps in (0, 1, 3):
+            crop = CropCell()
+            crop.commit_pest_damage(0.2, lag_steps)
+            elapsed = 0
+            while crop.health == 1.0 and elapsed <= lag_steps:
+                crop.reveal_committed_damage()
+                elapsed += 1
+            reveal_steps.append(0 if lag_steps == 0 else elapsed)
+        assert reveal_steps == [0, 1, 3]
+
+    def test_treatment_cannot_cancel_already_committed_damage(self) -> None:
+        crop = CropCell()
+        crop.commit_pest_damage(0.2, visibility_lag_steps=3)
+        assert crop.health == pytest.approx(1.0)
+        for _ in range(3):
+            crop.reveal_committed_damage()
+        assert crop.health == pytest.approx(0.8)
+        assert crop.yield_potential == pytest.approx(0.84)
+
+    def test_only_pest_damage_is_lagged(self) -> None:
+        field = CropField(
+            rows=1,
+            cols=1,
+            ecology=EcologyConfig(pest_damage_visibility_lag_steps=3),
+        )
+        field.pests[0][0].density = 100.0
+        field.weeds[0][0].density = 10.0
+        field._advance_crops(AgWeather())
+        crop = field.crops[0][0]
+        assert crop.committed_damage[-1] > 0.0
+        assert crop.health < 1.0
+        assert crop.health > 0.9
+
+    def test_committed_damage_stays_finite_nonnegative_and_bounded(self) -> None:
+        crop = CropCell()
+        for _ in range(50):
+            crop.commit_pest_damage(0.01, visibility_lag_steps=3)
+            crop.reveal_committed_damage()
+        assert len(crop.committed_damage) == 2
+        assert all(np.isfinite(value) for value in crop.committed_damage)
+        assert all(value >= 0.0 for value in crop.committed_damage)
+        assert 0.0 <= crop.health <= 1.0
+        assert 0.0 <= crop.yield_potential <= 1.0
+
+
 class TestLegacyEcologyControl:
     """Negative controls: with the coupling off, none of the new costs apply."""
+
+    def test_pest_damage_is_immediate_and_uncommitted(self) -> None:
+        field = CropField(rows=1, cols=1, ecology=EcologyConfig(enabled=False))
+        field.pests[0][0].density = 100.0
+        field._advance_crops(AgWeather())
+        crop = field.crops[0][0]
+        assert crop.committed_damage == []
+        assert crop.health < 1.0
 
     def test_spray_leaves_beneficials_untouched(self) -> None:
         field = CropField(rows=1, cols=1, ecology=EcologyConfig(enabled=False))

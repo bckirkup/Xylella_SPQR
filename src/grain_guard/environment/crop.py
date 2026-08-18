@@ -80,6 +80,13 @@ class CropCell(BaseModel):
             "drought suppresses the crop without permanently damaging it."
         ),
     )
+    committed_damage: list[float] = Field(
+        default_factory=list,
+        description=(
+            "Irreversible pest damage already committed but not yet visible. Each "
+            "entry matures on a future field step and cannot be cancelled by treatment."
+        ),
+    )
     is_cover_crop: bool = Field(
         default=False, description="Whether this cell is a cover crop alley (beneficial habitat)"
     )
@@ -96,9 +103,23 @@ class CropCell(BaseModel):
                 break
 
     def apply_damage(self, damage: float) -> None:
-        """Reduce health and yield potential from pest/weed pressure."""
+        """Reduce health and yield potential from visible pest/weed pressure."""
         self.health = max(0.0, self.health - damage)
         self.yield_potential = max(0.0, self.yield_potential - damage * 0.8)
+
+    def reveal_committed_damage(self) -> None:
+        """Make the oldest irreversible pest injury visible."""
+        if self.committed_damage:
+            self.apply_damage(self.committed_damage.pop(0))
+
+    def commit_pest_damage(self, damage: float, visibility_lag_steps: int) -> None:
+        """Commit pest injury now and reveal it only after the configured lag."""
+        if visibility_lag_steps == 0:
+            self.apply_damage(damage)
+            return
+        if not self.committed_damage:
+            self.committed_damage.extend(0.0 for _ in range(visibility_lag_steps - 1))
+        self.committed_damage.append(damage)
 
     @property
     def _abiotic_discount(self) -> float:

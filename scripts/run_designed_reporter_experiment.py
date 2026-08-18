@@ -78,6 +78,7 @@ def arm_spec(policy_arm: str, seed: int, args: argparse.Namespace) -> ArmSpec:
         reporting_levers=args.payoff_levers,
         reproduction_correctness_weight=args.correctness_weight,
         ecology_enabled=not args.legacy_ecology,
+        pest_damage_visibility_lag_steps=args.pest_damage_lag,
     )
 
 
@@ -111,6 +112,7 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
             "grounded_attractiveness_multiplier": args.grounded_multiplier,
             "pest_evolution_frozen": True,
             "ecology_enabled": not args.legacy_ecology,
+            "pest_damage_visibility_lag_steps": args.pest_damage_lag,
             "policy_arms": list(policy_arms),
             "payoff_levers": args.payoff_levers,
             "reproduction_correctness_weight": args.correctness_weight,
@@ -328,6 +330,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=POLICY_ARMS,
         default=list(POLICY_ARMS),
         help="Policy arms to run; restrict to spend a seed budget on one arm.",
+    )
+    parser.add_argument(
+        "--pest-damage-lag",
+        type=int,
+        default=None,
+        help=(
+            "Steps between pest injury being committed and becoming visible. "
+            "Omit for the domain default; pass 0 for the pre-lag before measurement."
+        ),
     )
     parser.add_argument(
         "--legacy-ecology",

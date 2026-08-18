@@ -42,6 +42,15 @@ class EcologyConfig(BaseModel):
             "never writes permanent damage, so a rewetted cell recovers."
         ),
     )
+    pest_damage_visibility_lag_steps: int = Field(
+        default=3,
+        ge=0,
+        le=30,
+        description=(
+            "Steps between irreversible pest injury being committed and becoming "
+            "visible in crop health, yield, and imagery."
+        ),
+    )
     secondary_intro_fraction: float = Field(default=0.2, ge=0.0)
     secondary_growth_multiplier: float = Field(default=2.0, ge=0.0)
     secondary_crop_damage_multiplier: float = Field(
@@ -249,14 +258,19 @@ class CropField(BaseModel):
                     )
                 )
                 crop.abiotic_stress = self._abiotic_stress(r, c, crop.soil_moisture)
+                crop.reveal_committed_damage()
                 pest_damage = self.pests[r][c].damage_rate
                 if self.ecology.enabled:
                     pest_damage += (
                         self.secondary_pests[r][c].damage_rate
                         * self.ecology.secondary_crop_damage_multiplier
                     )
+                lag_steps = (
+                    self.ecology.pest_damage_visibility_lag_steps if self.ecology.enabled else 0
+                )
+                crop.commit_pest_damage(pest_damage, lag_steps)
                 weed_damage = self.weeds[r][c].competition_factor * 0.01
-                crop.apply_damage(pest_damage + weed_damage)
+                crop.apply_damage(weed_damage)
 
     def _abiotic_stress(self, r: int, c: int, moisture: float) -> float:
         if not self.ecology.enabled:

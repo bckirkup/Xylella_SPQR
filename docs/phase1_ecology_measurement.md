@@ -128,7 +128,7 @@ The remaining cost is the pest loop. It was this domain's one known-good selecti
 
 ## Detector boundary audit
 
-The designed reporter reads only published `pheromone_traps` and `drone_imagery` streams with their declared coordinates. Abiotic stress changes crop health/NDVI-like damage while soil conductivity supplies noisy discriminating information. Secondary-pest pressure enters observable imagery through aggregate pest signal. The reporter does not read crop-field arrays, active locations, abiotic-stress state, pest species identity, or any other ground truth. Oracle reporting is diagnostic-only and was not included in the production arm set or best-reachable selection.
+The designed reporter reads only published `pheromone_traps` and `drone_imagery` streams with their declared coordinates. Abiotic stress changes the crop health/NDVI-like damage channel, which is where the look-alike lives; the imagery thermal channel and soil moisture/conductivity supply discriminating information, so drought is confusable in the damage channel rather than across the whole imagery vector. Secondary-pest pressure enters observable imagery through aggregate pest signal. The reporter does not read crop-field arrays, active locations, abiotic-stress state, pest species identity, or any other ground truth. Oracle reporting is diagnostic-only and was not included in the production arm set or best-reachable selection.
 
 No subsidies, grace periods, juvenile discounts, or population floors were added. The engine and TattleTots models were not changed.
 

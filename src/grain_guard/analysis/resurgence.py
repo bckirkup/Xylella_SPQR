@@ -106,16 +106,20 @@ def run_resurgence_arm(
     grid_rows: int = 20,
     grid_cols: int = 20,
     pest_intro_probability: float = 0.02,
+    pest_damage_visibility_lag_steps: int | None = None,
 ) -> ResurgenceRun:
     """Run one spray policy against the domain and report its end state."""
     if policy not in SPRAY_POLICIES:
         raise ValueError(f"unknown spray policy {policy!r}")
+    ecology_config: dict[str, Any] = {"enabled": ecology_enabled}
+    if pest_damage_visibility_lag_steps is not None:
+        ecology_config["pest_damage_visibility_lag_steps"] = pest_damage_visibility_lag_steps
     adapter = GrainGuardAdapter(
         grid_rows=grid_rows,
         grid_cols=grid_cols,
         seed=seed,
         pest_intro_probability=pest_intro_probability,
-        ecology_config={"enabled": ecology_enabled},
+        ecology_config=ecology_config,
     )
     sprays = 0
     primary_trace: list[float] = []
@@ -226,6 +230,7 @@ def run_resurgence_experiment(
     spray_interval: int = DEFAULT_SPRAY_INTERVAL,
     spray_threshold: float = DEFAULT_SPRAY_THRESHOLD,
     policies: Sequence[str] = SPRAY_POLICIES,
+    pest_damage_visibility_lag_steps: int | None = None,
 ) -> dict[str, Any]:
     """Run every policy over every seed and pool the comparison."""
     runs = [
@@ -236,6 +241,7 @@ def run_resurgence_experiment(
             ecology_enabled=ecology_enabled,
             spray_interval=spray_interval,
             spray_threshold=spray_threshold,
+            pest_damage_visibility_lag_steps=pest_damage_visibility_lag_steps,
         )
         for policy in policies
         for seed in seeds
@@ -249,6 +255,7 @@ def run_resurgence_experiment(
             "seeds": list(seeds),
             "steps": steps,
             "ecology_enabled": ecology_enabled,
+            "pest_damage_visibility_lag_steps": pest_damage_visibility_lag_steps,
             "spray_interval": spray_interval,
             "spray_threshold": spray_threshold,
             "spray_efficacy": SPRAY_EFFICACY,

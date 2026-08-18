@@ -17,7 +17,7 @@ from tattletots.interface.reporter_policy import (
 )
 
 import grain_guard.reporter_policy
-from grain_guard.analysis.arms import ArmSpec, simulation_config
+from grain_guard.analysis.arms import ArmSpec, domain_config, simulation_config
 from grain_guard.analysis.designed_reporter import (
     ALL_DESIGNED_ARM,
     CLAUSE_2_CORRELATION_THRESHOLD,
@@ -331,6 +331,39 @@ class TestSummaries:
     def test_summary_requires_at_least_one_seed(self) -> None:
         with pytest.raises(ValueError, match="no seeds recorded"):
             summarize_policy_arm(ALL_DESIGNED_ARM, [])
+
+
+class TestDamageLagConfigPlumbing:
+    def _spec(self, lag_steps: int | None) -> ArmSpec:
+        return ArmSpec(
+            name="damage_lag",
+            grounded_input_fraction=0.67,
+            seed=5,
+            pest_damage_visibility_lag_steps=lag_steps,
+        )
+
+    def test_omitted_lag_keeps_the_domain_default(self) -> None:
+        ecology = domain_config(self._spec(None))["ecology_config"]
+        assert ecology == {"enabled": True}
+
+    @pytest.mark.parametrize("lag_steps", [0, 1, 3, 10])
+    def test_lag_reaches_the_domain_config_unchanged(self, lag_steps: int) -> None:
+        ecology = domain_config(self._spec(lag_steps))["ecology_config"]
+        assert ecology["pest_damage_visibility_lag_steps"] == lag_steps
+
+    def test_lag_is_the_only_difference_between_measurement_arms(self) -> None:
+        control = domain_config(self._spec(0))
+        treatment = domain_config(self._spec(3))
+        changed = {key for key in control if control[key] != treatment[key]}
+        assert changed == {"ecology_config"}
+        control_ecology = control["ecology_config"]
+        treatment_ecology = treatment["ecology_config"]
+        ecology_changed = {
+            key
+            for key in control_ecology | treatment_ecology
+            if control_ecology.get(key) != treatment_ecology.get(key)
+        }
+        assert ecology_changed == {"pest_damage_visibility_lag_steps"}
 
 
 class TestResponseGateConfig:
