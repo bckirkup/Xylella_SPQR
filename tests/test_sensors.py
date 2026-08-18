@@ -91,7 +91,7 @@ class TestSoilSensor:
         sensor = SoilSensor(row=0, col=0)
         readings = []
         for stress in (0.0, 0.5, 1.0):
-            cell = CropCell(health=0.6, soil_moisture=0.3, abiotic_stress=stress)
+            cell = CropCell(health=0.6, soil_moisture=0.7, abiotic_stress=stress)
             samples = [sensor.observe(cell, np.random.default_rng(seed))[2] for seed in range(40)]
             readings.append(float(np.mean(samples)))
         assert readings[0] > readings[1] > readings[2]
