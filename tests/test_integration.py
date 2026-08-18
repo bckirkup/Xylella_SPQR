@@ -137,7 +137,32 @@ class TestWorldIntegration:
         ecology = result.domain_metrics["ecology"]
         assert ecology["initiation_is_degenerate"] is True
         assert ecology["initiation_degeneracy_reasons"]
-        assert ecology["event_prevalence"] == pytest.approx(0.0, rel=0.0, abs=1e-12)
+        assert 0.0 <= ecology["event_prevalence"] <= 1.0
+        assert ecology["event_prevalence"] > 0.0
+
+    def test_coupled_ecology_raises_event_prevalence(self) -> None:
+        """Coupled ecology should surface more ground-truth events than legacy dynamics."""
+        from grain_guard.runner import GrainDomainHooks, run_grain_simulation
+
+        prevalence = []
+        for enabled in (True, False):
+            hooks = GrainDomainHooks()
+            run = hooks.load_run_context(
+                cli_overrides={
+                    "domain": {
+                        "steps": 8,
+                        "grid_rows": 8,
+                        "grid_cols": 8,
+                        "ecology_config": {"enabled": enabled},
+                    },
+                    "layer": "tattletots",
+                    "simulation": {"initial_population": 8, "max_steps": 8, "seed": 42},
+                }
+            )
+            prevalence.append(
+                float(run_grain_simulation(run).domain_metrics["ecology"]["event_prevalence"])
+            )
+        assert prevalence[0] > prevalence[1]
 
     def test_cost_computation(self) -> None:
         """Adapter cost model should return valid dict."""

@@ -40,6 +40,7 @@ _FLOAT_ADAPTER_KEYS: tuple[str, ...] = (
     "resistance_initial_frequency",
 )
 _BOOL_ADAPTER_KEYS: tuple[str, ...] = ("freeze_pest_evolution",)
+_OBJECT_ADAPTER_KEYS: tuple[str, ...] = ("ecology_config",)
 
 
 def adapter_kwargs_from_config(domain_config: dict[str, Any]) -> dict[str, Any]:
@@ -60,6 +61,9 @@ def adapter_kwargs_from_config(domain_config: dict[str, Any]) -> dict[str, Any]:
     for key in _BOOL_ADAPTER_KEYS:
         if key in domain_config:
             kwargs[key] = bool(domain_config[key])
+    for key in _OBJECT_ADAPTER_KEYS:
+        if key in domain_config:
+            kwargs[key] = domain_config[key]
     return kwargs
 
 
@@ -148,6 +152,8 @@ class GrainDomainHooks:
             "final_health": field.mean_crop_health(),
             "final_yield": field.mean_yield_potential(),
             "total_pests": field.total_pest_density(),
+            "primary_pests": field.total_primary_pest_density(),
+            "secondary_pests": field.total_secondary_pest_density(),
             "total_weeds": field.total_weed_density(),
         }
         if "telemetry_summary" in layer_metrics:

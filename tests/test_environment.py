@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from grain_guard.environment.crop import CropCell, CropType, GrowthStage
-from grain_guard.environment.field import CropField, LandscapeType
+from grain_guard.environment.field import CropField, EcologyConfig, LandscapeType
 from grain_guard.environment.pest import PestPopulation
 from grain_guard.environment.weather import AgWeather
 from grain_guard.environment.weed import WeedPopulation
@@ -222,3 +222,140 @@ class TestCropField:
     def test_mean_yield_potential_initial(self) -> None:
         f = CropField(rows=5, cols=5)
         assert f.mean_yield_potential() == pytest.approx(1.0)
+
+
+class TestCoupledEcology:
+    def test_beneficial_spray_mortality_is_graded_and_exceeds_pest_kill(self) -> None:
+        remaining: list[float] = []
+        for mortality in (0.2, 0.6, 0.95):
+            field = CropField(
+                rows=1,
+                cols=1,
+                ecology=EcologyConfig(beneficial_spray_mortality=mortality),
+            )
+            field.pests[0][0].density = 100.0
+            field.pests[0][0].resistance_freq = 0.0
+            field.biological_control[0] = 10.0
+            field.apply_pesticide(0, 0, 0.8, np.random.default_rng(4))
+            remaining.append(float(field.biological_control[0]))
+        assert remaining[0] > remaining[1] > remaining[2]
+        assert remaining[-1] < 10.0 * (1.0 - 0.8)
+
+    def test_predation_operates_in_monoculture_with_graded_strength(self) -> None:
+        densities: list[float] = []
+        for rate in (0.0, 0.1, 0.2):
+            field = CropField(
+                rows=1,
+                cols=1,
+                landscape=LandscapeType.MONOCULTURE,
+                ecology=EcologyConfig(primary_predation_rate=rate),
+            )
+            field.pests[0][0].density = 40.0
+            field.biological_control[0] = 20.0
+            field._advance_pests(np.random.default_rng(8))
+            densities.append(field.pests[0][0].density)
+        assert densities[0] > densities[1] > densities[2]
+        assert densities[0] - densities[2] > 3.0
+
+    def test_neighbor_recolonization_is_slow_and_graded(self) -> None:
+        center_after_one_step: list[float] = []
+        for rate in (0.02, 0.08, 0.2):
+            field = CropField(
+                rows=3,
+                cols=3,
+                ecology=EcologyConfig(
+                    beneficial_response_rate=0.0,
+                    beneficial_recolonization_rate=rate,
+                    beneficial_noise=0.0,
+                ),
+            )
+            field.biological_control[:] = 10.0
+            field.biological_control[4] = 0.0
+            field._update_biological_control(np.random.default_rng(3))
+            center_after_one_step.append(float(field.biological_control[4]))
+        assert center_after_one_step[0] < center_after_one_step[1] < center_after_one_step[2]
+        assert center_after_one_step[1] < 2.0
+
+    def test_spraying_releases_untreated_secondary_pest(self) -> None:
+        ecology = EcologyConfig(beneficial_noise=0.0)
+        sprayed = CropField(rows=3, cols=3, ecology=ecology)
+        unsprayed = CropField(rows=3, cols=3, ecology=ecology)
+        for field in (sprayed, unsprayed):
+            field.secondary_pests[1][1].density = 20.0
+            field.biological_control[:] = 10.0
+        sprayed.apply_pesticide(1, 1, 0.8, np.random.default_rng(2))
+        weather = AgWeather(temperature=25.0, wind_speed=0.0, precipitation=0.0)
+        for _ in range(5):
+            sprayed.step(weather, np.random.default_rng(17))
+            unsprayed.step(weather, np.random.default_rng(17))
+        assert sprayed.total_secondary_pest_density() > unsprayed.total_secondary_pest_density()
+        assert (
+            sprayed.total_secondary_pest_density() - unsprayed.total_secondary_pest_density() > 1.0
+        )
+
+    def test_abiotic_stress_is_bounded_and_increases_as_soil_dries(self) -> None:
+        field = CropField(rows=1, cols=1)
+        stresses = [field._abiotic_stress(0, 0, moisture) for moisture in (0.5, 0.2, 0.0)]
+        assert 0.0 <= stresses[0] < stresses[1] < stresses[2] <= 1.0
+
+    def test_introductions_are_patches_not_field_wide(self) -> None:
+        field = CropField(rows=10, cols=10)
+        field.stochastic_pest_introduction(np.random.default_rng(42), probability=1.0)
+        occupied = {
+            (row, col)
+            for row in range(field.rows)
+            for col in range(field.cols)
+            if field.cell_pest_density(row, col) > 0.0
+        }
+        interior = [(row, col) for row, col in occupied if 0 < row < 9]
+        assert [cell for cell in interior if 0 < cell[1] < 9]
+        assert len(occupied) < field.rows * field.cols
+        assert field.total_secondary_pest_density() > 0.0
+
+    def test_population_and_stress_invariants_hold_over_steps(self) -> None:
+        field = CropField(rows=5, cols=5)
+        rng = np.random.default_rng(19)
+        field.stochastic_pest_introduction(rng, probability=1.0)
+        for _ in range(40):
+            field.step(AgWeather(), rng)
+        densities = [
+            field.cell_pest_density(row, col)
+            for row in range(field.rows)
+            for col in range(field.cols)
+        ]
+        stress = [cell.abiotic_stress for row in field.crops for cell in row]
+        assert all(np.isfinite(value) for value in densities)
+        assert all(value >= 0.0 for value in densities)
+        assert all(np.isfinite(value) for value in stress)
+        assert all(0.0 <= value <= 1.0 for value in stress)
+        assert np.all(np.isfinite(field.biological_control))
+        assert np.all(field.biological_control >= 0.0)
+
+
+class TestLegacyEcologyControl:
+    """Negative controls: with the coupling off, none of the new costs apply."""
+
+    def test_spray_leaves_beneficials_untouched(self) -> None:
+        field = CropField(rows=1, cols=1, ecology=EcologyConfig(enabled=False))
+        field.pests[0][0].density = 50.0
+        field.biological_control[0] = 10.0
+        field.apply_pesticide(0, 0, 0.8, np.random.default_rng(4))
+        assert field.biological_control[0] == pytest.approx(10.0)
+
+    def test_monoculture_predation_absent(self) -> None:
+        field = CropField(rows=1, cols=1, ecology=EcologyConfig(enabled=False))
+        field.pests[0][0].density = 20.0
+        field.biological_control[0] = 5.0
+        field._advance_pests(np.random.default_rng(8))
+        assert field.pests[0][0].density > 20.0
+
+    def test_no_secondary_pest_or_abiotic_stress(self) -> None:
+        field = CropField(rows=5, cols=5, ecology=EcologyConfig(enabled=False))
+        rng = np.random.default_rng(19)
+        field.stochastic_pest_introduction(rng, probability=1.0)
+        for _ in range(20):
+            field.step(AgWeather(), rng)
+        assert field.total_secondary_pest_density() == pytest.approx(0.0)
+        assert field.total_pest_density() == pytest.approx(field.total_primary_pest_density())
+        stress = [cell.abiotic_stress for row in field.crops for cell in row]
+        assert stress == pytest.approx([0.0] * len(stress))

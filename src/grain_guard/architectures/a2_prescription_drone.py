@@ -94,7 +94,7 @@ class PrescriptionDrone(Architecture):
         actual_weed: bool,
     ) -> None:
         if actual_pest:
-            field.pests[row][col].apply_pesticide(self.spray_efficacy, self.rng)
+            field.apply_pesticide(row, col, self.spray_efficacy, self.rng)
         if actual_weed:
             field.weeds[row][col].apply_herbicide(self.spray_efficacy, self.rng)
 

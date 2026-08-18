@@ -87,7 +87,7 @@ class AITractor(Architecture):
             should_treat=pest_detected and weather.is_spray_safe,
             volume=1.0,
             actual_problem=actual_pest,
-            application=lambda: pest.apply_pesticide(self.spray_efficacy, self.rng),
+            application=lambda: field.apply_pesticide(row, col, self.spray_efficacy, self.rng),
         )
 
         if actual_pest and not pest_detected:

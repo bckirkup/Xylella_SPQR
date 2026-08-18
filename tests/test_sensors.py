@@ -80,6 +80,23 @@ class TestSoilSensor:
         obs = ss.observe(CropCell(), rng)
         assert obs.shape == (3,)
 
+    def test_conductivity_separates_abiotic_stress_at_equal_health(self) -> None:
+        """Drought damage and pest damage look alike in health; soil tells them apart.
+
+        Both cells carry the same reduced health, so a health- or NDVI-only
+        reading cannot separate them. Conductivity has to fall with abiotic
+        stress for the discrimination to exist at all, and it has to stay
+        graded rather than switch on a single boundary.
+        """
+        sensor = SoilSensor(row=0, col=0)
+        readings = []
+        for stress in (0.0, 0.5, 1.0):
+            cell = CropCell(health=0.6, soil_moisture=0.7, abiotic_stress=stress)
+            samples = [sensor.observe(cell, np.random.default_rng(seed))[2] for seed in range(40)]
+            readings.append(float(np.mean(samples)))
+        assert readings[0] > readings[1] > readings[2]
+        assert readings[0] - readings[2] > 0.1
+
 
 class TestYieldMonitor:
     def test_returns_none_early_season(self) -> None:
