@@ -385,6 +385,20 @@ class TestRecoverableAbioticStress:
         assert min(underlying) > 0.99
         assert min(yields) > 0.99
 
+    def test_secondary_damage_multiplier_grades_crop_survival(self) -> None:
+        health: list[float] = []
+        for multiplier in (0.0, 0.2, 1.0):
+            field = CropField(
+                rows=1,
+                cols=1,
+                ecology=EcologyConfig(secondary_crop_damage_multiplier=multiplier),
+            )
+            field.secondary_pests[0][0].density = 100.0
+            field._advance_crops(AgWeather())
+            health.append(field.crops[0][0].health)
+        assert health[0] > health[1] > health[2]
+        assert health[0] - health[2] > 0.05
+
     def test_drought_lowers_pest_carrying_capacity_without_damaging_the_crop(self) -> None:
         densities: list[float] = []
         for stress in (0.0, 0.5, 1.0):

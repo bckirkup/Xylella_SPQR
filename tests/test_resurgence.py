@@ -113,23 +113,22 @@ class TestRunInvariants:
         assert 0.0 <= run.final_yield_potential <= 1.0
         assert run.final_beneficial_density >= 0.0
 
-    def test_coupled_spraying_depletes_natural_enemies_far_harder_than_legacy(self) -> None:
-        """Legacy beneficials only follow prey; coupled beneficials are sprayed dead.
+    def test_coupled_spraying_keeps_natural_enemies_depleted_despite_enemy_release(self) -> None:
+        """Broad-spectrum mortality remains visible after the secondary pest erupts.
 
-        Both settings lose enemies when the field is sprayed, because in both a
-        crashed pest population lowers the density beneficials track. Only the
-        coupled setting adds direct broad-spectrum mortality, so its surviving
-        fraction has to be much lower than the prey-tracking one.
+        The untreated secondary pest can support more beneficial recovery than
+        the legacy prey-tracking loop, so a ratio to each mode's no-spray arm is
+        not comparable. The coupled sprayed arm must still end enemy-depleted in
+        absolute terms and relative to its own unsprayed control.
         """
-        surviving_fraction = []
-        for ecology_enabled in (False, True):
-            unsprayed = _short_run(NO_SPRAY, ecology_enabled=ecology_enabled)
-            sprayed = _short_run(INDISCRIMINATE, ecology_enabled=ecology_enabled)
-            surviving_fraction.append(
-                sprayed.final_beneficial_density / unsprayed.final_beneficial_density
-            )
-        assert all(fraction < 1.0 for fraction in surviving_fraction)
-        assert surviving_fraction[1] < 0.5 * surviving_fraction[0]
+        legacy_sprayed = _short_run(INDISCRIMINATE, ecology_enabled=False)
+        coupled_unsprayed = _short_run(NO_SPRAY, ecology_enabled=True)
+        coupled_sprayed = _short_run(INDISCRIMINATE, ecology_enabled=True)
+        assert coupled_sprayed.final_beneficial_density < legacy_sprayed.final_beneficial_density
+        assert (
+            coupled_sprayed.final_beneficial_density
+            < 0.25 * coupled_unsprayed.final_beneficial_density
+        )
 
     def test_secondary_pest_exists_only_when_coupled(self) -> None:
         assert _short_run(INDISCRIMINATE).final_secondary_density > 0.0

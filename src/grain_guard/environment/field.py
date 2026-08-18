@@ -44,6 +44,14 @@ class EcologyConfig(BaseModel):
     )
     secondary_intro_fraction: float = Field(default=0.2, ge=0.0)
     secondary_growth_multiplier: float = Field(default=2.0, ge=0.0)
+    secondary_crop_damage_multiplier: float = Field(
+        default=0.2,
+        ge=0.0,
+        description=(
+            "Per-capita crop damage of the secondary pest relative to its species "
+            "default. This keeps enemy release from immediately starving itself."
+        ),
+    )
     introduction_patch_radius: int = Field(default=1, ge=0, le=3)
 
 
@@ -243,7 +251,10 @@ class CropField(BaseModel):
                 crop.abiotic_stress = self._abiotic_stress(r, c, crop.soil_moisture)
                 pest_damage = self.pests[r][c].damage_rate
                 if self.ecology.enabled:
-                    pest_damage += self.secondary_pests[r][c].damage_rate
+                    pest_damage += (
+                        self.secondary_pests[r][c].damage_rate
+                        * self.ecology.secondary_crop_damage_multiplier
+                    )
                 weed_damage = self.weeds[r][c].competition_factor * 0.01
                 crop.apply_damage(pest_damage + weed_damage)
 
