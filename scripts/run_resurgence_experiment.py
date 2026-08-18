@@ -157,6 +157,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=list(SPRAY_POLICIES),
     )
     parser.add_argument(
+        "--pest-damage-lag",
+        type=int,
+        default=None,
+        help=(
+            "Steps between pest injury being committed and becoming visible. "
+            "Omit for the domain default; pass 0 for the pre-lag before measurement."
+        ),
+    )
+    parser.add_argument(
         "--legacy-ecology",
         action="store_true",
         help="Disable phase-1 ecological coupling to reproduce the pre-change domain.",
@@ -181,6 +190,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         spray_interval=args.spray_interval,
         spray_threshold=args.spray_threshold,
         policies=args.policies,
+        pest_damage_visibility_lag_steps=args.pest_damage_lag,
     )
     json_path, report_path = write_artifacts(results, out_dir)
     verdict = results["verdict"]

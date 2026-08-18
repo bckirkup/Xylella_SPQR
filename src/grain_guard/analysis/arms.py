@@ -58,6 +58,9 @@ class ArmSpec:
             window is built.
         ecology_enabled: enable the phase-1 coupled ecology; false reproduces
             the legacy uncoupled domain for before/after measurement.
+        pest_damage_visibility_lag_steps: steps between pest injury being
+            committed and becoming visible. ``None`` keeps the domain default;
+            ``0`` reproduces the immediately-visible damage measured in phase 1.
     """
 
     name: str
@@ -72,6 +75,7 @@ class ArmSpec:
     reproduction_correctness_weight: float = 0.0
     pest_intro_probability: float | None = None
     ecology_enabled: bool = True
+    pest_damage_visibility_lag_steps: int | None = None
 
 
 @dataclass
@@ -128,6 +132,14 @@ def simulation_config(spec: ArmSpec) -> dict[str, Any]:
     return config
 
 
+def ecology_config(spec: ArmSpec) -> dict[str, Any]:
+    """Domain ecology settings for one arm."""
+    config: dict[str, Any] = {"enabled": spec.ecology_enabled}
+    if spec.pest_damage_visibility_lag_steps is not None:
+        config["pest_damage_visibility_lag_steps"] = spec.pest_damage_visibility_lag_steps
+    return config
+
+
 def domain_config(spec: ArmSpec) -> dict[str, Any]:
     """Domain configuration for one arm."""
     config: dict[str, Any] = {
@@ -142,7 +154,7 @@ def domain_config(spec: ArmSpec) -> dict[str, Any]:
         "pest_threshold": 10.0,
         "engine_max_dim": 75,
         "freeze_pest_evolution": spec.freeze_pest_evolution,
-        "ecology_config": {"enabled": spec.ecology_enabled},
+        "ecology_config": ecology_config(spec),
     }
     if spec.pest_intro_probability is not None:
         config["pest_intro_probability"] = spec.pest_intro_probability
