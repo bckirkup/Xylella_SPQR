@@ -79,6 +79,8 @@ def arm_spec(policy_arm: str, seed: int, args: argparse.Namespace) -> ArmSpec:
         reproduction_correctness_weight=args.correctness_weight,
         ecology_enabled=not args.legacy_ecology,
         pest_damage_visibility_lag_steps=args.pest_damage_lag,
+        spray_budget_capacity=args.spray_budget_capacity,
+        spray_budget_interval_steps=args.spray_budget_interval,
     )
 
 
@@ -113,6 +115,8 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
             "pest_evolution_frozen": True,
             "ecology_enabled": not args.legacy_ecology,
             "pest_damage_visibility_lag_steps": args.pest_damage_lag,
+            "spray_budget_capacity": args.spray_budget_capacity,
+            "spray_budget_interval_steps": args.spray_budget_interval,
             "policy_arms": list(policy_arms),
             "payoff_levers": args.payoff_levers,
             "reproduction_correctness_weight": args.correctness_weight,
@@ -154,6 +158,9 @@ _ARM_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Reports per adult lifetime", "mean_reports_per_adult_lifetime", "{:.2f}"),
     ("Evidence rate (designed adult steps)", "mean_any_evidence_rate", "{:.4f}"),
     ("Designed escalation rate", "mean_designed_escalation_rate", "{:.4f}"),
+    ("Spray attempts", "mean_spray_attempts", "{:.1f}"),
+    ("Sprays applied", "mean_sprays_applied", "{:.1f}"),
+    ("Sprays denied by budget", "mean_sprays_denied", "{:.1f}"),
     ("Attention solvent share", "mean_attention_solvent_share", "{:.4f}"),
     ("Attention capacity per capita", "mean_attention_capacity_per_capita", "{:.3f}"),
     ("Grounded-yield share", "mean_grounded_yield_share", "{:.4f}"),
@@ -339,6 +346,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "Steps between pest injury being committed and becoming visible. "
             "Omit for the domain default; pass 0 for the pre-lag before measurement."
         ),
+    )
+    parser.add_argument(
+        "--spray-budget-capacity",
+        type=int,
+        default=None,
+        help=(
+            "Maximum spray applications per budget interval. Omit for the unlimited "
+            "capacity the lagged-damage baseline was measured under."
+        ),
+    )
+    parser.add_argument(
+        "--spray-budget-interval",
+        type=int,
+        default=7,
+        help="Steps per spray-budget interval; only used with --spray-budget-capacity.",
     )
     parser.add_argument(
         "--legacy-ecology",

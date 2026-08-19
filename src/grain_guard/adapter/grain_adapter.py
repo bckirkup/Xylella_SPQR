@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel, Field
 from tattletots.engine.response_judgment import judge_necessity
 from tattletots.interface.domain_adapter import DomainAdapter
 from tattletots.models.dispatch_target import DispatchTarget
@@ -54,6 +55,13 @@ class CostCoefficients:
     response: float = 1.5
     false_alarm: float = 3.0
     missed: float = 8.0
+
+
+class SprayBudgetConfig(BaseModel):
+    """Hard cap on pesticide applications within a regulatory interval."""
+
+    capacity: int = Field(default=60, ge=1)
+    interval_steps: int = Field(default=7, ge=1)
 
 
 @dataclass(frozen=True)
@@ -119,6 +127,7 @@ class GrainGuardAdapter(DomainAdapter):
         resistance_initial_frequency: float = 0.01,
         freeze_pest_evolution: bool = False,
         ecology_config: EcologyConfig | dict[str, object] | None = None,
+        spray_budget_config: SprayBudgetConfig | dict[str, object] | None = None,
         seed: int = 42,
     ) -> None:
         self.rng = np.random.default_rng(seed)
@@ -147,6 +156,16 @@ class GrainGuardAdapter(DomainAdapter):
         self._streams: list[Stream] = []
         self._users: list[User] = []
         self._current_step = 0
+        self._spray_budget = (
+            SprayBudgetConfig.model_validate(spray_budget_config)
+            if spray_budget_config is not None
+            else None
+        )
+        self._spray_budget_window = -1
+        self._spray_budget_remaining = 0
+        self._spray_attempts = 0
+        self._sprays_applied = 0
+        self._sprays_denied = 0
         self._pest_threshold = pest_threshold
         self._cost = cost_coefficients or CostCoefficients()
         self._engine_max_dim = engine_max_dim
@@ -158,6 +177,18 @@ class GrainGuardAdapter(DomainAdapter):
     def pest_evolution_frozen(self) -> bool:
         """Whether the pest adversary is held fixed for this run."""
         return self._field.freeze_pest_evolution
+
+    @property
+    def spray_budget_metrics(self) -> dict[str, int | None]:
+        """Operational spray demand, fulfillment, and remaining capacity."""
+        return {
+            "capacity": self._spray_budget.capacity if self._spray_budget else None,
+            "interval_steps": (self._spray_budget.interval_steps if self._spray_budget else None),
+            "attempts": self._spray_attempts,
+            "applied": self._sprays_applied,
+            "denied": self._sprays_denied,
+            "remaining": self._spray_budget_remaining_value(),
+        }
 
     def _apply_resistance_frequency(self, frequency: float) -> None:
         """Set initial herbicide resistance frequency across the field."""
@@ -539,11 +570,36 @@ class GrainGuardAdapter(DomainAdapter):
             "damage_cost": n_missed * self._cost.missed,
         }
 
-    def dispatch_spray(self, row: int, col: int) -> None:
-        """Apply spot-spray pesticide at a field cell."""
-        if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
+    def _spray_budget_remaining_value(self) -> int | None:
+        if self._spray_budget is None:
+            return None
+        if self._spray_budget_window < 0:
+            return self._spray_budget.capacity
+        return self._spray_budget_remaining
+
+    def _refresh_spray_budget(self) -> None:
+        """Refill spray capacity at the first request in each interval."""
+        if self._spray_budget is None:
             return
+        window = self._current_step // self._spray_budget.interval_steps
+        if window != self._spray_budget_window:
+            self._spray_budget_window = window
+            self._spray_budget_remaining = self._spray_budget.capacity
+
+    def dispatch_spray(self, row: int, col: int) -> bool:
+        """Apply spot-spray pesticide if the location and budget permit it."""
+        if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
+            return False
+        self._spray_attempts += 1
+        self._refresh_spray_budget()
+        if self._spray_budget is not None and self._spray_budget_remaining == 0:
+            self._sprays_denied += 1
+            return False
         self._field.apply_pesticide(row, col, SPRAY_EFFICACY, self.rng)
+        if self._spray_budget is not None:
+            self._spray_budget_remaining -= 1
+        self._sprays_applied += 1
+        return True
 
     def get_responder_user_id(self) -> str:
         """Agronomist authorizes field spray dispatch."""
@@ -561,12 +617,18 @@ class GrainGuardAdapter(DomainAdapter):
         outcomes: list[ResponseOutcome] = []
         responder_id = self.get_responder_user_id()
 
-        for target in targets:
+        ordered_targets = targets
+        if self._spray_budget is not None:
+            ordered_targets = sorted(
+                targets,
+                key=lambda target: target.cop_threat_level,
+                reverse=True,
+            )
+        for target in ordered_targets:
             row, col = target.location
             before = self._pest_severity(row, col)
-            self.dispatch_spray(row, col)
+            dispatched = self.dispatch_spray(row, col)
             after = self._pest_severity(row, col)
-            dispatched = True
 
             problem, mitigated, necessary = judge_necessity(
                 before,

@@ -133,6 +133,11 @@ class TestRunnerConfigPlumbing:
     def test_absent_keys_keep_adapter_defaults(self) -> None:
         assert adapter_kwargs_from_config({}) == {}
 
+    def test_spray_budget_object_is_forwarded_unchanged(self) -> None:
+        budget = {"capacity": 60, "interval_steps": 7}
+        kwargs = adapter_kwargs_from_config({"spray_budget_config": budget})
+        assert kwargs == {"spray_budget_config": budget}
+
     def test_typed_keys_are_coerced(self) -> None:
         kwargs = adapter_kwargs_from_config(
             {"n_traps": "12", "pest_threshold": "10", "freeze_pest_evolution": 0}

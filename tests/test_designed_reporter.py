@@ -366,6 +366,34 @@ class TestDamageLagConfigPlumbing:
         assert ecology_changed == {"pest_damage_visibility_lag_steps"}
 
 
+class TestSprayBudgetConfigPlumbing:
+    def _spec(self, capacity: int | None, interval_steps: int = 7) -> ArmSpec:
+        return ArmSpec(
+            name="spray_budget",
+            grounded_input_fraction=0.67,
+            seed=5,
+            spray_budget_capacity=capacity,
+            spray_budget_interval_steps=interval_steps,
+        )
+
+    def test_omitted_budget_preserves_the_unlimited_baseline(self) -> None:
+        assert "spray_budget_config" not in domain_config(self._spec(None))
+
+    @pytest.mark.parametrize("capacity", [1, 60, 400])
+    def test_capacity_reaches_the_domain_config_unchanged(self, capacity: int) -> None:
+        config = domain_config(self._spec(capacity, interval_steps=9))
+        assert config["spray_budget_config"] == {
+            "capacity": capacity,
+            "interval_steps": 9,
+        }
+
+    def test_budget_is_the_only_difference_from_the_lagged_baseline(self) -> None:
+        control = domain_config(self._spec(None))
+        treatment = domain_config(self._spec(60))
+        changed = {key for key in control | treatment if control.get(key) != treatment.get(key)}
+        assert changed == {"spray_budget_config"}
+
+
 class TestResponseGateConfig:
     """The response gate is config-gated, default off, and nothing else moves."""
 
