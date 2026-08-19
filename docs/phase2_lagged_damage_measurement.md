@@ -6,7 +6,7 @@ Pest injury is committed into a crop-cell queue on the step when feeding occurs.
 
 ## Commands
 
-The phase-1 recoverable artifact is reused as the 21-seed zero-lag baseline because `--pest-damage-lag 0` is the old `_advance_crops` behavior. A three-seed, 400-step zero-lag rerun matched all 9 corresponding committed baseline per-seed records exactly.
+The phase-1 recoverable artifact is reused as the 21-seed zero-lag baseline because `--pest-damage-lag 0` is the old `_advance_crops` behavior. A three-seed, 400-step zero-lag rerun matched all 9 corresponding committed baseline per-seed records to within 1e-11 relative. It is not bit-identical: splitting one combined pest-plus-weed `apply_damage` call into a queued pest commit and a separate weed call changes floating-point evaluation order, so 8 of the 9 records differ by at most 2.4e-15 absolute in the pest parent-child correlation.
 
 ```bash
 PYTHONPATH=src /home/ubuntu/repos/Xylella-SPQR/.venv/bin/python \

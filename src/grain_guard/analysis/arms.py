@@ -61,6 +61,9 @@ class ArmSpec:
         pest_damage_visibility_lag_steps: steps between pest injury being
             committed and becoming visible. ``None`` keeps the domain default;
             ``0`` reproduces the immediately-visible damage measured in phase 1.
+        spray_budget_capacity: maximum applications in one budget interval.
+            ``None`` preserves the unlimited lagged-damage baseline.
+        spray_budget_interval_steps: length of the budget interval in steps.
     """
 
     name: str
@@ -76,6 +79,8 @@ class ArmSpec:
     pest_intro_probability: float | None = None
     ecology_enabled: bool = True
     pest_damage_visibility_lag_steps: int | None = None
+    spray_budget_capacity: int | None = None
+    spray_budget_interval_steps: int = 7
 
 
 @dataclass
@@ -156,6 +161,11 @@ def domain_config(spec: ArmSpec) -> dict[str, Any]:
         "freeze_pest_evolution": spec.freeze_pest_evolution,
         "ecology_config": ecology_config(spec),
     }
+    if spec.spray_budget_capacity is not None:
+        config["spray_budget_config"] = {
+            "capacity": spec.spray_budget_capacity,
+            "interval_steps": spec.spray_budget_interval_steps,
+        }
     if spec.pest_intro_probability is not None:
         config["pest_intro_probability"] = spec.pest_intro_probability
     return config

@@ -295,6 +295,7 @@ def measure_designed_arm(
             "parent_child_reproductive_correlation"
         ),
         "pest_selection_differential": pest.get("selection_differential"),
+        "spray_budget": run.adapter.spray_budget_metrics,
         "evidence_rates": designed_evidence_rates(run.world),
         "oracle_policy_instances": oracle_policy_instances(run.world),
         "cohorts": _cohort_split(list(run.tracker.records.values())),
@@ -423,6 +424,9 @@ def summarize_policy_arm(policy_arm: str, records: Sequence[dict[str, Any]]) -> 
         "mean_attention_capacity_per_capita": _nested_mean(
             records, "attention_solvency", "mean_attention_capacity_per_capita"
         ),
+        "mean_spray_attempts": _nested_mean(records, "spray_budget", "attempts"),
+        "mean_sprays_applied": _nested_mean(records, "spray_budget", "applied"),
+        "mean_sprays_denied": _nested_mean(records, "spray_budget", "denied"),
         "mean_any_evidence_rate": _nested_mean(records, "evidence_rates", "any_evidence_rate"),
         "mean_trap_evidence_rate": _nested_mean(records, "evidence_rates", "trap_evidence_rate"),
         "mean_drone_evidence_rate": _nested_mean(records, "evidence_rates", "drone_evidence_rate"),

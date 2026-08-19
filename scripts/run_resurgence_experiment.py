@@ -40,6 +40,7 @@ SAFE_OUTPUT_DIR = re.compile(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*")
 
 _POLICY_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Spray applications", "mean_sprays", "{:.0f}"),
+    ("Spray applications denied by budget", "mean_denied_sprays", "{:.0f}"),
     ("Primary pest density", "mean_primary_density", "{:.1f}"),
     ("Secondary pest density", "mean_secondary_density", "{:.1f}"),
     ("Total pest density", "mean_total_density", "{:.1f}"),
@@ -166,6 +167,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--spray-budget-capacity",
+        type=int,
+        default=None,
+        help=(
+            "Maximum spray applications per budget interval. Omit for the unlimited "
+            "capacity earlier phases were measured under."
+        ),
+    )
+    parser.add_argument(
+        "--spray-budget-interval",
+        type=int,
+        default=7,
+        help="Steps per spray-budget interval; only used with --spray-budget-capacity.",
+    )
+    parser.add_argument(
         "--legacy-ecology",
         action="store_true",
         help="Disable phase-1 ecological coupling to reproduce the pre-change domain.",
@@ -191,6 +207,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         spray_threshold=args.spray_threshold,
         policies=args.policies,
         pest_damage_visibility_lag_steps=args.pest_damage_lag,
+        spray_budget_capacity=args.spray_budget_capacity,
+        spray_budget_interval_steps=args.spray_budget_interval,
     )
     json_path, report_path = write_artifacts(results, out_dir)
     verdict = results["verdict"]

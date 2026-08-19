@@ -39,7 +39,8 @@ class ResurgenceRun:
         seed: domain seed.
         ecology_enabled: whether the coupled phase-1 ecology was active.
         steps: steps run.
-        sprays: spray applications dispatched.
+        sprays: spray applications actually applied.
+        denied_sprays: applications refused by the spray budget.
         final_primary_density: summed primary-pest density at the last step.
         final_secondary_density: summed secondary-pest density at the last step.
         final_total_density: summed density of every pest species.
@@ -63,6 +64,7 @@ class ResurgenceRun:
     ecology_enabled: bool
     steps: int
     sprays: int
+    denied_sprays: int
     final_primary_density: float
     final_secondary_density: float
     final_total_density: float
@@ -107,6 +109,8 @@ def run_resurgence_arm(
     grid_cols: int = 20,
     pest_intro_probability: float = 0.02,
     pest_damage_visibility_lag_steps: int | None = None,
+    spray_budget_capacity: int | None = None,
+    spray_budget_interval_steps: int = 7,
 ) -> ResurgenceRun:
     """Run one spray policy against the domain and report its end state."""
     if policy not in SPRAY_POLICIES:
@@ -114,14 +118,22 @@ def run_resurgence_arm(
     ecology_config: dict[str, Any] = {"enabled": ecology_enabled}
     if pest_damage_visibility_lag_steps is not None:
         ecology_config["pest_damage_visibility_lag_steps"] = pest_damage_visibility_lag_steps
+    spray_budget_config: dict[str, Any] | None = None
+    if spray_budget_capacity is not None:
+        spray_budget_config = {
+            "capacity": spray_budget_capacity,
+            "interval_steps": spray_budget_interval_steps,
+        }
     adapter = GrainGuardAdapter(
         grid_rows=grid_rows,
         grid_cols=grid_cols,
         seed=seed,
         pest_intro_probability=pest_intro_probability,
         ecology_config=ecology_config,
+        spray_budget_config=spray_budget_config,
     )
     sprays = 0
+    denied = 0
     primary_trace: list[float] = []
     secondary_trace: list[float] = []
     for step in range(steps):
@@ -131,8 +143,10 @@ def run_resurgence_arm(
         if step % spray_interval != 0:
             continue
         for row, col in _spray_targets(adapter, policy, spray_threshold):
-            adapter.dispatch_spray(row, col)
-            sprays += 1
+            if adapter.dispatch_spray(row, col):
+                sprays += 1
+            else:
+                denied += 1
     field = adapter.field
     totals = [
         primary + secondary
@@ -144,6 +158,7 @@ def run_resurgence_arm(
         ecology_enabled=ecology_enabled,
         steps=steps,
         sprays=sprays,
+        denied_sprays=denied,
         final_primary_density=field.total_primary_pest_density(),
         final_secondary_density=field.total_secondary_pest_density(),
         final_total_density=field.total_primary_pest_density()
@@ -167,6 +182,7 @@ def summarize_policy(policy: str, runs: Sequence[ResurgenceRun]) -> dict[str, An
         "n_seeds": len(runs),
         "ecology_enabled": runs[0].ecology_enabled,
         "mean_sprays": fmean([float(run.sprays) for run in runs]),
+        "mean_denied_sprays": fmean([float(run.denied_sprays) for run in runs]),
         "mean_primary_density": fmean([run.final_primary_density for run in runs]),
         "mean_secondary_density": fmean([run.final_secondary_density for run in runs]),
         "mean_total_density": fmean([run.final_total_density for run in runs]),
@@ -231,6 +247,8 @@ def run_resurgence_experiment(
     spray_threshold: float = DEFAULT_SPRAY_THRESHOLD,
     policies: Sequence[str] = SPRAY_POLICIES,
     pest_damage_visibility_lag_steps: int | None = None,
+    spray_budget_capacity: int | None = None,
+    spray_budget_interval_steps: int = 7,
 ) -> dict[str, Any]:
     """Run every policy over every seed and pool the comparison."""
     runs = [
@@ -242,6 +260,8 @@ def run_resurgence_experiment(
             spray_interval=spray_interval,
             spray_threshold=spray_threshold,
             pest_damage_visibility_lag_steps=pest_damage_visibility_lag_steps,
+            spray_budget_capacity=spray_budget_capacity,
+            spray_budget_interval_steps=spray_budget_interval_steps,
         )
         for policy in policies
         for seed in seeds
@@ -256,6 +276,8 @@ def run_resurgence_experiment(
             "steps": steps,
             "ecology_enabled": ecology_enabled,
             "pest_damage_visibility_lag_steps": pest_damage_visibility_lag_steps,
+            "spray_budget_capacity": spray_budget_capacity,
+            "spray_budget_interval_steps": spray_budget_interval_steps,
             "spray_interval": spray_interval,
             "spray_threshold": spray_threshold,
             "spray_efficacy": SPRAY_EFFICACY,

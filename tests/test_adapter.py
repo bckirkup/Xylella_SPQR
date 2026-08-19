@@ -306,6 +306,97 @@ class TestAdapterProperties:
             abs=1e-12,
         )
 
+    @pytest.mark.parametrize(
+        "budget",
+        [
+            {"capacity": 0, "interval_steps": 7},
+            {"capacity": 60, "interval_steps": 0},
+        ],
+    )
+    def test_spray_budget_rejects_nonpositive_limits(self, budget: dict[str, int]) -> None:
+        with pytest.raises(ValueError):
+            GrainGuardAdapter(spray_budget_config=budget)
+
+    def test_spray_budget_capacity_grades_applied_and_denied_requests(self) -> None:
+        applied: list[int] = []
+        denied: list[int] = []
+        for capacity in (1, 2, 3):
+            adapter = GrainGuardAdapter(
+                grid_rows=2,
+                grid_cols=2,
+                spray_budget_config={"capacity": capacity, "interval_steps": 7},
+            )
+            results = [adapter.dispatch_spray(0, index) for index in range(2)]
+            results.append(adapter.dispatch_spray(1, 0))
+            applied.append(sum(results))
+            denied.append(3 - sum(results))
+        assert applied == [1, 2, 3]
+        assert denied == [2, 1, 0]
+
+    def test_denied_spray_does_not_change_pests_or_beneficials(self) -> None:
+        adapter = GrainGuardAdapter(
+            grid_rows=1,
+            grid_cols=2,
+            spray_budget_config={"capacity": 1, "interval_steps": 7},
+        )
+        assert adapter.dispatch_spray(0, 0)
+        pest_before = adapter.field.pests[0][1].density
+        beneficial_before = adapter.field.biological_control[1]
+        assert not adapter.dispatch_spray(0, 1)
+        assert adapter.field.pests[0][1].density == pytest.approx(pest_before)
+        assert adapter.field.biological_control[1] == pytest.approx(beneficial_before)
+
+    def test_spray_budget_replenishes_only_at_interval_boundary(self) -> None:
+        adapter = GrainGuardAdapter(
+            grid_rows=1,
+            grid_cols=2,
+            spray_budget_config={"capacity": 1, "interval_steps": 3},
+        )
+        assert adapter.dispatch_spray(0, 0)
+        adapter.step(2)
+        assert not adapter.dispatch_spray(0, 1)
+        adapter.step(3)
+        assert adapter.dispatch_spray(0, 1)
+        metrics = adapter.spray_budget_metrics
+        assert metrics["attempts"] == 3
+        assert metrics["applied"] == 2
+        assert metrics["denied"] == 1
+        assert metrics["remaining"] == 0
+
+    def test_unconfigured_spray_budget_preserves_unlimited_dispatch(self) -> None:
+        adapter = GrainGuardAdapter(grid_rows=1, grid_cols=2)
+        assert all(adapter.dispatch_spray(0, index % 2) for index in range(10))
+        metrics = adapter.spray_budget_metrics
+        assert metrics["capacity"] is None
+        assert metrics["applied"] == 10
+        assert metrics["denied"] == 0
+
+    def test_budget_prioritizes_published_cop_threat_level(self) -> None:
+        adapter = GrainGuardAdapter(
+            grid_rows=2,
+            grid_cols=2,
+            spray_budget_config={"capacity": 1, "interval_steps": 7},
+        )
+        targets = [
+            DispatchTarget(
+                location=(0, 0),
+                reports=[],
+                responder_user_id=adapter.get_responder_user_id(),
+                cop_threat_level=0.2,
+            ),
+            DispatchTarget(
+                location=(1, 1),
+                reports=[],
+                responder_user_id=adapter.get_responder_user_id(),
+                cop_threat_level=0.9,
+            ),
+        ]
+        outcomes = adapter.dispatch_and_judge_responses(targets, time_step=0)
+        assert outcomes[0].location == (1, 1)
+        assert outcomes[0].dispatched
+        assert outcomes[1].location == (0, 0)
+        assert not outcomes[1].dispatched
+
     def test_dispatch_and_judge_necessary_spray(self) -> None:
         adapter = GrainGuardAdapter(grid_rows=10, grid_cols=10, pest_threshold=10.0)
         adapter.field.pests[3][3].density = 20.0
