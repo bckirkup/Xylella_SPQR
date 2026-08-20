@@ -1,5 +1,7 @@
 # GrainGuard phase 2: hard spray budget
 
+> **Superseded, kept as a negative result.** The global per-interval quota measured here is off by default and no later measurement in this series uses it. It raised the exploitable margin by +6.63 pp but destroyed the resurgence criterion, because capping field-wide pesticide volume also caps the collateral kill of natural enemies that makes over-spraying self-defeating. Per-Tot tank capacity replaces it: see `docs/phase2_tank_capacity_measurement.md`. The mechanism and its tests remain in the repository so this failure stays reproducible with `--spray-budget-capacity 60 --spray-budget-interval 7`.
+
 This experiment isolates the second phase-2 feature against the merged lagged-damage baseline. The only treatment difference is a hard domain-side budget of 60 pesticide applications per 7 simulation steps. An omitted budget remains unlimited, so the committed lagged-damage artifacts are the control.
 
 When capacity is scarce, the adapter orders COP dispatch targets by their published `cop_threat_level`; denied targets are not sprayed and do not change pest or beneficial density. This uses only the existing detector output, not field ground truth. Weather-gated efficacy is not included.

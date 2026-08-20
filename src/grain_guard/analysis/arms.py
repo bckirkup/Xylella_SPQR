@@ -62,8 +62,20 @@ class ArmSpec:
             committed and becoming visible. ``None`` keeps the domain default;
             ``0`` reproduces the immediately-visible damage measured in phase 1.
         spray_budget_capacity: maximum applications in one budget interval.
-            ``None`` preserves the unlimited lagged-damage baseline.
+            ``None`` preserves the unlimited lagged-damage baseline, and is the
+            default because the global cap destroyed the resurgence criterion.
         spray_budget_interval_steps: length of the budget interval in steps.
+        sprayer_fleet_enabled: give the farm finite per-Tot spray tanks, so an
+            application spent on a false positive is unavailable nearby.
+            ``False`` preserves the unlimited lagged-damage baseline.
+        n_spot_sprayers: spray drones owned; ``None`` uses the fleet default.
+        spot_tank_liters: tank volume per drone; ``None`` uses the body plan.
+        liters_per_application: product one application consumes; ``None`` uses
+            the fleet default.
+        applications_per_step: cells one loaded drone treats per step; ``None``
+            uses the fleet default.
+        refill_duration_steps: steps spent refilling on arrival; ``None`` uses
+            the fleet default.
     """
 
     name: str
@@ -81,6 +93,12 @@ class ArmSpec:
     pest_damage_visibility_lag_steps: int | None = None
     spray_budget_capacity: int | None = None
     spray_budget_interval_steps: int = 7
+    sprayer_fleet_enabled: bool = False
+    n_spot_sprayers: int | None = None
+    spot_tank_liters: float | None = None
+    liters_per_application: float | None = None
+    applications_per_step: int | None = None
+    refill_duration_steps: int | None = None
 
 
 @dataclass
@@ -166,9 +184,23 @@ def domain_config(spec: ArmSpec) -> dict[str, Any]:
             "capacity": spec.spray_budget_capacity,
             "interval_steps": spec.spray_budget_interval_steps,
         }
+    if spec.sprayer_fleet_enabled:
+        config["sprayer_fleet_config"] = sprayer_fleet_config(spec)
     if spec.pest_intro_probability is not None:
         config["pest_intro_probability"] = spec.pest_intro_probability
     return config
+
+
+def sprayer_fleet_config(spec: ArmSpec) -> dict[str, Any]:
+    """Per-Tot tank settings for one arm, omitting unset overrides."""
+    overrides: dict[str, Any] = {
+        "n_spot_sprayers": spec.n_spot_sprayers,
+        "spot_tank_liters": spec.spot_tank_liters,
+        "liters_per_application": spec.liters_per_application,
+        "applications_per_step": spec.applications_per_step,
+        "refill_duration_steps": spec.refill_duration_steps,
+    }
+    return {key: value for key, value in overrides.items() if value is not None}
 
 
 def run_context(spec: ArmSpec) -> RunContext:

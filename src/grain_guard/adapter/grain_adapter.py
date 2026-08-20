@@ -25,6 +25,7 @@ from tattletots.models.user import User
 from grain_guard.environment.field import CropField, EcologyConfig, LandscapeType
 from grain_guard.environment.pest import PestPopulation
 from grain_guard.environment.weather import AgWeather
+from grain_guard.equipment.sprayer_fleet import SprayerFleet, SprayerFleetConfig
 from grain_guard.sensors.drone_imagery import DroneImager
 from grain_guard.sensors.pheromone_trap import PheromoneTrap
 from grain_guard.sensors.satellite import SatelliteSensor
@@ -58,7 +59,13 @@ class CostCoefficients:
 
 
 class SprayBudgetConfig(BaseModel):
-    """Hard cap on pesticide applications within a regulatory interval."""
+    """Hard cap on pesticide applications within a regulatory interval.
+
+    Superseded by :class:`~grain_guard.equipment.sprayer_fleet.SprayerFleetConfig`
+    and off by default: measurement showed that capping field-wide pesticide
+    volume also caps the collateral kill of natural enemies, which destroys the
+    resurgence criterion. See ``docs/phase2_spray_budget_measurement.md``.
+    """
 
     capacity: int = Field(default=60, ge=1)
     interval_steps: int = Field(default=7, ge=1)
@@ -128,6 +135,7 @@ class GrainGuardAdapter(DomainAdapter):
         freeze_pest_evolution: bool = False,
         ecology_config: EcologyConfig | dict[str, object] | None = None,
         spray_budget_config: SprayBudgetConfig | dict[str, object] | None = None,
+        sprayer_fleet_config: SprayerFleetConfig | dict[str, object] | None = None,
         seed: int = 42,
     ) -> None:
         self.rng = np.random.default_rng(seed)
@@ -163,6 +171,7 @@ class GrainGuardAdapter(DomainAdapter):
         )
         self._spray_budget_window = -1
         self._spray_budget_remaining = 0
+        self._sprayer_fleet = self._build_sprayer_fleet(sprayer_fleet_config)
         self._spray_attempts = 0
         self._sprays_applied = 0
         self._sprays_denied = 0
@@ -189,6 +198,25 @@ class GrainGuardAdapter(DomainAdapter):
             "denied": self._sprays_denied,
             "remaining": self._spray_budget_remaining_value(),
         }
+
+    @property
+    def sprayer_fleet_metrics(self) -> dict[str, float | int] | None:
+        """Per-Tot tank fulfillment, refill trips, and travel; ``None`` if unlimited."""
+        if self._sprayer_fleet is None:
+            return None
+        return self._sprayer_fleet.metrics()
+
+    def _build_sprayer_fleet(
+        self, config: SprayerFleetConfig | dict[str, object] | None
+    ) -> SprayerFleet | None:
+        """Equip the farm with finite tanks, or leave spray capacity unlimited."""
+        if config is None:
+            return None
+        return SprayerFleet(
+            config=SprayerFleetConfig.model_validate(config),
+            rows=self._field.rows,
+            cols=self._field.cols,
+        )
 
     def _apply_resistance_frequency(self, frequency: float) -> None:
         """Set initial herbicide resistance frequency across the field."""
@@ -587,7 +615,11 @@ class GrainGuardAdapter(DomainAdapter):
             self._spray_budget_remaining = self._spray_budget.capacity
 
     def dispatch_spray(self, row: int, col: int) -> bool:
-        """Apply spot-spray pesticide if the location and budget permit it."""
+        """Spot-spray one cell if permission and physical capacity both allow it.
+
+        Regulatory permission is checked before equipment so a request refused
+        by a quota does not consume product from a tank.
+        """
         if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
             return False
         self._spray_attempts += 1
@@ -595,11 +627,39 @@ class GrainGuardAdapter(DomainAdapter):
         if self._spray_budget is not None and self._spray_budget_remaining == 0:
             self._sprays_denied += 1
             return False
+        if self._sprayer_fleet is not None and not self._sprayer_fleet.request_spot_application(
+            row, col, self._current_step
+        ):
+            self._sprays_denied += 1
+            return False
         self._field.apply_pesticide(row, col, SPRAY_EFFICACY, self.rng)
         if self._spray_budget is not None:
             self._spray_budget_remaining -= 1
         self._sprays_applied += 1
         return True
+
+    def broadcast_spray(self, cells: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Treat many cells in one boom pass and return the cells treated.
+
+        Broadcast volume lives on the boom sprayer, not on the drones, so a
+        whole-field pass stays available even when spot capacity is exhausted:
+        finite tanks make targeting scarce without capping pesticide load.
+        Without a fleet configured this is one unlimited spot spray per cell.
+        """
+        in_bounds = [
+            (row, col)
+            for row, col in cells
+            if 0 <= row < self._field.rows and 0 <= col < self._field.cols
+        ]
+        if self._sprayer_fleet is None:
+            return [(row, col) for row, col in in_bounds if self.dispatch_spray(row, col)]
+        self._spray_attempts += len(in_bounds)
+        served = self._sprayer_fleet.request_broadcast_pass(in_bounds, self._current_step)
+        for row, col in served:
+            self._field.apply_pesticide(row, col, SPRAY_EFFICACY, self.rng)
+        self._sprays_applied += len(served)
+        self._sprays_denied += len(in_bounds) - len(served)
+        return served
 
     def get_responder_user_id(self) -> str:
         """Agronomist authorizes field spray dispatch."""
@@ -618,7 +678,7 @@ class GrainGuardAdapter(DomainAdapter):
         responder_id = self.get_responder_user_id()
 
         ordered_targets = targets
-        if self._spray_budget is not None:
+        if self._spray_budget is not None or self._sprayer_fleet is not None:
             ordered_targets = sorted(
                 targets,
                 key=lambda target: target.cop_threat_level,

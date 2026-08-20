@@ -296,6 +296,7 @@ def measure_designed_arm(
         ),
         "pest_selection_differential": pest.get("selection_differential"),
         "spray_budget": run.adapter.spray_budget_metrics,
+        "sprayer_fleet": run.adapter.sprayer_fleet_metrics,
         "evidence_rates": designed_evidence_rates(run.world),
         "oracle_policy_instances": oracle_policy_instances(run.world),
         "cohorts": _cohort_split(list(run.tracker.records.values())),
@@ -427,6 +428,17 @@ def summarize_policy_arm(policy_arm: str, records: Sequence[dict[str, Any]]) -> 
         "mean_spray_attempts": _nested_mean(records, "spray_budget", "attempts"),
         "mean_sprays_applied": _nested_mean(records, "spray_budget", "applied"),
         "mean_sprays_denied": _nested_mean(records, "spray_budget", "denied"),
+        "mean_spot_granted": _nested_mean(records, "sprayer_fleet", "spot_granted"),
+        "mean_spot_denied_empty": _nested_mean(records, "sprayer_fleet", "spot_denied_empty"),
+        "mean_spot_denied_refilling": _nested_mean(
+            records, "sprayer_fleet", "spot_denied_refilling"
+        ),
+        "mean_spot_denied_worked_out": _nested_mean(
+            records, "sprayer_fleet", "spot_denied_worked_out"
+        ),
+        "mean_spot_fulfilled_share": _nested_mean(records, "sprayer_fleet", "spot_fulfilled_share"),
+        "mean_tank_refills": _nested_mean(records, "sprayer_fleet", "refills"),
+        "mean_liters_applied": _nested_mean(records, "sprayer_fleet", "liters_applied"),
         "mean_any_evidence_rate": _nested_mean(records, "evidence_rates", "any_evidence_rate"),
         "mean_trap_evidence_rate": _nested_mean(records, "evidence_rates", "trap_evidence_rate"),
         "mean_drone_evidence_rate": _nested_mean(records, "evidence_rates", "drone_evidence_rate"),
