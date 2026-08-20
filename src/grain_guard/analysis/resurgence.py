@@ -20,6 +20,7 @@ from statistics import fmean
 from typing import Any
 
 from grain_guard.adapter.grain_adapter import SPRAY_EFFICACY, GrainGuardAdapter
+from grain_guard.equipment.sprayer_fleet import SprayerFleetConfig
 
 NO_SPRAY = "no_spray"
 INDISCRIMINATE = "indiscriminate"
@@ -51,6 +52,7 @@ class ResurgenceRun:
         peak_total_density: largest per-step summed density seen.
         mean_crop_health: field-mean crop health at the last step.
         final_yield_potential: field-mean yield potential at the last step.
+        sprayer_fleet: per-Tot tank metrics, or ``None`` with unlimited capacity.
 
     Damage in this domain is monotone (``CropCell.apply_damage`` never heals),
     so ``final_yield_potential`` is the integral of the harm a policy allowed,
@@ -75,6 +77,7 @@ class ResurgenceRun:
     peak_total_density: float
     mean_crop_health: float
     final_yield_potential: float
+    sprayer_fleet: dict[str, float | int] | None = None
 
 
 def _spray_targets(
@@ -97,6 +100,19 @@ def _spray_targets(
     raise ValueError(f"unknown spray policy {policy!r}")
 
 
+def _apply_spray_policy(
+    adapter: GrainGuardAdapter,
+    policy: str,
+    targets: list[tuple[int, int]],
+) -> tuple[int, int]:
+    """Spray a policy's targets and report applications applied and refused."""
+    if policy == INDISCRIMINATE:
+        served = adapter.broadcast_spray(targets)
+        return len(served), len(targets) - len(served)
+    applied = sum(1 for row, col in targets if adapter.dispatch_spray(row, col))
+    return applied, len(targets) - applied
+
+
 def run_resurgence_arm(
     policy: str,
     seed: int,
@@ -111,8 +127,15 @@ def run_resurgence_arm(
     pest_damage_visibility_lag_steps: int | None = None,
     spray_budget_capacity: int | None = None,
     spray_budget_interval_steps: int = 7,
+    sprayer_fleet_config: SprayerFleetConfig | None = None,
 ) -> ResurgenceRun:
-    """Run one spray policy against the domain and report its end state."""
+    """Run one spray policy against the domain and report its end state.
+
+    With a fleet configured, the indiscriminate policy sprays through the boom
+    sprayer, because that is the equipment a whole-field pass actually uses;
+    thresholded spraying goes cell by cell through the drone fleet and is the
+    policy that finite tanks make scarce.
+    """
     if policy not in SPRAY_POLICIES:
         raise ValueError(f"unknown spray policy {policy!r}")
     ecology_config: dict[str, Any] = {"enabled": ecology_enabled}
@@ -131,6 +154,7 @@ def run_resurgence_arm(
         pest_intro_probability=pest_intro_probability,
         ecology_config=ecology_config,
         spray_budget_config=spray_budget_config,
+        sprayer_fleet_config=sprayer_fleet_config,
     )
     sprays = 0
     denied = 0
@@ -142,11 +166,10 @@ def run_resurgence_arm(
         secondary_trace.append(adapter.field.total_secondary_pest_density())
         if step % spray_interval != 0:
             continue
-        for row, col in _spray_targets(adapter, policy, spray_threshold):
-            if adapter.dispatch_spray(row, col):
-                sprays += 1
-            else:
-                denied += 1
+        targets = _spray_targets(adapter, policy, spray_threshold)
+        applied, refused = _apply_spray_policy(adapter, policy, targets)
+        sprays += applied
+        denied += refused
     field = adapter.field
     totals = [
         primary + secondary
@@ -170,6 +193,7 @@ def run_resurgence_arm(
         peak_total_density=max(totals),
         mean_crop_health=field.mean_crop_health(),
         final_yield_potential=field.mean_yield_potential(),
+        sprayer_fleet=adapter.sprayer_fleet_metrics,
     )
 
 
@@ -193,7 +217,20 @@ def summarize_policy(policy: str, runs: Sequence[ResurgenceRun]) -> dict[str, An
         "mean_peak_total_density": fmean([run.peak_total_density for run in runs]),
         "mean_crop_health": fmean([run.mean_crop_health for run in runs]),
         "mean_yield_potential": fmean([run.final_yield_potential for run in runs]),
+        "mean_refills": _fleet_mean(runs, "refills"),
+        "mean_spot_granted": _fleet_mean(runs, "spot_granted"),
+        "mean_spot_denied_empty": _fleet_mean(runs, "spot_denied_empty"),
+        "mean_spot_denied_refilling": _fleet_mean(runs, "spot_denied_refilling"),
+        "mean_spot_denied_worked_out": _fleet_mean(runs, "spot_denied_worked_out"),
+        "mean_spot_fulfilled_share": _fleet_mean(runs, "spot_fulfilled_share"),
+        "mean_liters_applied": _fleet_mean(runs, "liters_applied"),
     }
+
+
+def _fleet_mean(runs: Sequence[ResurgenceRun], key: str) -> float | None:
+    """Mean of one fleet metric, or ``None`` when capacity was unlimited."""
+    values = [float(run.sprayer_fleet[key]) for run in runs if run.sprayer_fleet is not None]
+    return fmean(values) if values else None
 
 
 def resurgence_verdict(summaries: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -249,6 +286,7 @@ def run_resurgence_experiment(
     pest_damage_visibility_lag_steps: int | None = None,
     spray_budget_capacity: int | None = None,
     spray_budget_interval_steps: int = 7,
+    sprayer_fleet_config: SprayerFleetConfig | None = None,
 ) -> dict[str, Any]:
     """Run every policy over every seed and pool the comparison."""
     runs = [
@@ -262,6 +300,7 @@ def run_resurgence_experiment(
             pest_damage_visibility_lag_steps=pest_damage_visibility_lag_steps,
             spray_budget_capacity=spray_budget_capacity,
             spray_budget_interval_steps=spray_budget_interval_steps,
+            sprayer_fleet_config=sprayer_fleet_config,
         )
         for policy in policies
         for seed in seeds
@@ -278,6 +317,9 @@ def run_resurgence_experiment(
             "pest_damage_visibility_lag_steps": pest_damage_visibility_lag_steps,
             "spray_budget_capacity": spray_budget_capacity,
             "spray_budget_interval_steps": spray_budget_interval_steps,
+            "sprayer_fleet": (
+                sprayer_fleet_config.model_dump() if sprayer_fleet_config is not None else None
+            ),
             "spray_interval": spray_interval,
             "spray_threshold": spray_threshold,
             "spray_efficacy": SPRAY_EFFICACY,

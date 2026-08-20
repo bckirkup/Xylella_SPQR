@@ -22,6 +22,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from grain_guard.analysis.fleet_options import (
+    add_sprayer_fleet_arguments,
+    sprayer_fleet_config_from_args,
+)
 from grain_guard.analysis.resurgence import (
     DEFAULT_SPRAY_INTERVAL,
     DEFAULT_SPRAY_THRESHOLD,
@@ -40,7 +44,14 @@ SAFE_OUTPUT_DIR = re.compile(r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*")
 
 _POLICY_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Spray applications", "mean_sprays", "{:.0f}"),
-    ("Spray applications denied by budget", "mean_denied_sprays", "{:.0f}"),
+    ("Spray applications denied (budget or tank)", "mean_denied_sprays", "{:.0f}"),
+    ("Spot applications granted by fleet", "mean_spot_granted", "{:.0f}"),
+    ("Spot requests refused: empty tank", "mean_spot_denied_empty", "{:.0f}"),
+    ("Spot requests refused: refilling", "mean_spot_denied_refilling", "{:.0f}"),
+    ("Spot requests refused: beat spent", "mean_spot_denied_worked_out", "{:.0f}"),
+    ("Spot fulfillment share", "mean_spot_fulfilled_share", "{:.4f}"),
+    ("Tank refills", "mean_refills", "{:.0f}"),
+    ("Liters applied", "mean_liters_applied", "{:.1f}"),
     ("Primary pest density", "mean_primary_density", "{:.1f}"),
     ("Secondary pest density", "mean_secondary_density", "{:.1f}"),
     ("Total pest density", "mean_total_density", "{:.1f}"),
@@ -89,6 +100,8 @@ def markdown_report(results: dict[str, Any]) -> str:
         f"- Spray interval: `{config['spray_interval']}` steps,"
         f" efficacy `{config['spray_efficacy']}`,"
         f" precise threshold `{config['spray_threshold']}`",
+        f"- Per-Tot spray tanks: `{config.get('sprayer_fleet')}`",
+        f"- Global spray-budget capacity: `{config.get('spray_budget_capacity')}`",
         "",
         "## Verdict",
         "",
@@ -126,6 +139,10 @@ def markdown_report(results: dict[str, Any]) -> str:
             "- `--legacy-ecology` disables the phase-1 coupling (broad-spectrum mortality on",
             "  natural enemies, predation in every cell, slow recolonization, secondary pest,",
             "  abiotic look-alikes) and reproduces the pre-change dynamics for the before side.",
+            "- With `--sprayer-fleet`, thresholded spraying draws on finite drone tanks with",
+            "  refill travel and downtime, while a whole-field pass is served by the boom",
+            "  sprayer: targeting is scarce, total pesticide load is not capped, so the",
+            "  ecological penalty for over-spraying is left intact.",
             "- Resurgence counts only when the indiscriminate policy ends with lower yield",
             "  than the precise policy and more final pests than not spraying. Requiring both",
             "  prevents crop collapse from masquerading as pest control: yield integrates the",
@@ -181,6 +198,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=7,
         help="Steps per spray-budget interval; only used with --spray-budget-capacity.",
     )
+    add_sprayer_fleet_arguments(parser)
     parser.add_argument(
         "--legacy-ecology",
         action="store_true",
@@ -209,6 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         pest_damage_visibility_lag_steps=args.pest_damage_lag,
         spray_budget_capacity=args.spray_budget_capacity,
         spray_budget_interval_steps=args.spray_budget_interval,
+        sprayer_fleet_config=sprayer_fleet_config_from_args(args),
     )
     json_path, report_path = write_artifacts(results, out_dir)
     verdict = results["verdict"]

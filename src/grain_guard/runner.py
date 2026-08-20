@@ -40,7 +40,11 @@ _FLOAT_ADAPTER_KEYS: tuple[str, ...] = (
     "resistance_initial_frequency",
 )
 _BOOL_ADAPTER_KEYS: tuple[str, ...] = ("freeze_pest_evolution",)
-_OBJECT_ADAPTER_KEYS: tuple[str, ...] = ("ecology_config", "spray_budget_config")
+_OBJECT_ADAPTER_KEYS: tuple[str, ...] = (
+    "ecology_config",
+    "spray_budget_config",
+    "sprayer_fleet_config",
+)
 
 
 def adapter_kwargs_from_config(domain_config: dict[str, Any]) -> dict[str, Any]:

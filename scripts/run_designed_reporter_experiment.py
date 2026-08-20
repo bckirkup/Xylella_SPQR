@@ -33,6 +33,7 @@ from grain_guard.analysis.designed_reporter import (
     measure_designed_arm,
     summarize_policy_arm,
 )
+from grain_guard.analysis.fleet_options import add_sprayer_fleet_arguments
 from grain_guard.reporter_policy import (
     DEFAULT_THRESHOLD_DENSITY,
     DEFAULT_TRAP_CATCH_EFFICIENCY,
@@ -81,6 +82,12 @@ def arm_spec(policy_arm: str, seed: int, args: argparse.Namespace) -> ArmSpec:
         pest_damage_visibility_lag_steps=args.pest_damage_lag,
         spray_budget_capacity=args.spray_budget_capacity,
         spray_budget_interval_steps=args.spray_budget_interval,
+        sprayer_fleet_enabled=args.sprayer_fleet,
+        n_spot_sprayers=args.n_spot_sprayers,
+        spot_tank_liters=args.spot_tank_liters,
+        liters_per_application=args.liters_per_application,
+        applications_per_step=args.applications_per_step,
+        refill_duration_steps=args.refill_duration,
     )
 
 
@@ -117,6 +124,12 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
             "pest_damage_visibility_lag_steps": args.pest_damage_lag,
             "spray_budget_capacity": args.spray_budget_capacity,
             "spray_budget_interval_steps": args.spray_budget_interval,
+            "sprayer_fleet": args.sprayer_fleet,
+            "n_spot_sprayers": args.n_spot_sprayers,
+            "spot_tank_liters": args.spot_tank_liters,
+            "liters_per_application": args.liters_per_application,
+            "applications_per_step": args.applications_per_step,
+            "refill_duration_steps": args.refill_duration,
             "policy_arms": list(policy_arms),
             "payoff_levers": args.payoff_levers,
             "reproduction_correctness_weight": args.correctness_weight,
@@ -160,7 +173,14 @@ _ARM_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Designed escalation rate", "mean_designed_escalation_rate", "{:.4f}"),
     ("Spray attempts", "mean_spray_attempts", "{:.1f}"),
     ("Sprays applied", "mean_sprays_applied", "{:.1f}"),
-    ("Sprays denied by budget", "mean_sprays_denied", "{:.1f}"),
+    ("Sprays denied (budget or tank)", "mean_sprays_denied", "{:.1f}"),
+    ("Spot applications granted by fleet", "mean_spot_granted", "{:.1f}"),
+    ("Spot requests refused: empty tank", "mean_spot_denied_empty", "{:.1f}"),
+    ("Spot requests refused: refilling", "mean_spot_denied_refilling", "{:.1f}"),
+    ("Spot requests refused: beat spent", "mean_spot_denied_worked_out", "{:.1f}"),
+    ("Spot fulfillment share", "mean_spot_fulfilled_share", "{:.4f}"),
+    ("Tank refills", "mean_tank_refills", "{:.1f}"),
+    ("Liters applied", "mean_liters_applied", "{:.1f}"),
     ("Attention solvent share", "mean_attention_solvent_share", "{:.4f}"),
     ("Attention capacity per capita", "mean_attention_capacity_per_capita", "{:.3f}"),
     ("Grounded-yield share", "mean_grounded_yield_share", "{:.4f}"),
@@ -267,6 +287,8 @@ def markdown_report(results: dict[str, Any]) -> str:
         f"- Payoff levers 1-4 enabled: `{config['payoff_levers']}`",
         f"- `reproduction_correctness_weight`: `{config['reproduction_correctness_weight']}`",
         f"- Policy arms: `{', '.join(config['policy_arms'])}`",
+        f"- Per-Tot spray tanks: `{config.get('sprayer_fleet')}`",
+        f"- Global spray-budget capacity: `{config.get('spray_budget_capacity')}`",
         "",
         "## Exploitable margin",
         "",
@@ -362,6 +384,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=7,
         help="Steps per spray-budget interval; only used with --spray-budget-capacity.",
     )
+    add_sprayer_fleet_arguments(parser)
     parser.add_argument(
         "--legacy-ecology",
         action="store_true",
