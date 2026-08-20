@@ -76,6 +76,16 @@ class ArmSpec:
             uses the fleet default.
         refill_duration_steps: steps spent refilling on arrival; ``None`` uses
             the fleet default.
+        spray_weather_enabled: gate applications on the weather they are made
+            in, so wind refuses a spray and rain washes part of it off.
+            ``False`` preserves the tank-capacity baseline, in which weather
+            never touches efficacy.
+        wind_block_speed_mps: wind at or above which an application is refused;
+            ``None`` uses the weather-gate default.
+        rain_washoff_full_mm: rainfall that washes off the full washable share
+            of a dose; ``None`` uses the weather-gate default.
+        washoff_strength: share of a dose rain can remove; ``None`` uses the
+            weather-gate default.
     """
 
     name: str
@@ -99,6 +109,10 @@ class ArmSpec:
     liters_per_application: float | None = None
     applications_per_step: int | None = None
     refill_duration_steps: int | None = None
+    spray_weather_enabled: bool = False
+    wind_block_speed_mps: float | None = None
+    rain_washoff_full_mm: float | None = None
+    washoff_strength: float | None = None
 
 
 @dataclass
@@ -186,6 +200,8 @@ def domain_config(spec: ArmSpec) -> dict[str, Any]:
         }
     if spec.sprayer_fleet_enabled:
         config["sprayer_fleet_config"] = sprayer_fleet_config(spec)
+    if spec.spray_weather_enabled:
+        config["spray_weather_config"] = spray_weather_config(spec)
     if spec.pest_intro_probability is not None:
         config["pest_intro_probability"] = spec.pest_intro_probability
     return config
@@ -199,6 +215,16 @@ def sprayer_fleet_config(spec: ArmSpec) -> dict[str, Any]:
         "liters_per_application": spec.liters_per_application,
         "applications_per_step": spec.applications_per_step,
         "refill_duration_steps": spec.refill_duration_steps,
+    }
+    return {key: value for key, value in overrides.items() if value is not None}
+
+
+def spray_weather_config(spec: ArmSpec) -> dict[str, Any]:
+    """Weather-gate settings for one arm, omitting unset overrides."""
+    overrides: dict[str, Any] = {
+        "wind_block_speed_mps": spec.wind_block_speed_mps,
+        "rain_washoff_full_mm": spec.rain_washoff_full_mm,
+        "washoff_strength": spec.washoff_strength,
     }
     return {key: value for key, value in overrides.items() if value is not None}
 

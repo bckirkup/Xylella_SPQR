@@ -34,6 +34,7 @@ from grain_guard.analysis.designed_reporter import (
     summarize_policy_arm,
 )
 from grain_guard.analysis.fleet_options import add_sprayer_fleet_arguments
+from grain_guard.analysis.weather_options import add_spray_weather_arguments
 from grain_guard.reporter_policy import (
     DEFAULT_THRESHOLD_DENSITY,
     DEFAULT_TRAP_CATCH_EFFICIENCY,
@@ -88,6 +89,10 @@ def arm_spec(policy_arm: str, seed: int, args: argparse.Namespace) -> ArmSpec:
         liters_per_application=args.liters_per_application,
         applications_per_step=args.applications_per_step,
         refill_duration_steps=args.refill_duration,
+        spray_weather_enabled=args.spray_weather,
+        wind_block_speed_mps=args.wind_block_speed,
+        rain_washoff_full_mm=args.rain_washoff_full_mm,
+        washoff_strength=args.washoff_strength,
     )
 
 
@@ -130,6 +135,10 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
             "liters_per_application": args.liters_per_application,
             "applications_per_step": args.applications_per_step,
             "refill_duration_steps": args.refill_duration,
+            "spray_weather": args.spray_weather,
+            "wind_block_speed_mps": args.wind_block_speed,
+            "rain_washoff_full_mm": args.rain_washoff_full_mm,
+            "washoff_strength": args.washoff_strength,
             "policy_arms": list(policy_arms),
             "payoff_levers": args.payoff_levers,
             "reproduction_correctness_weight": args.correctness_weight,
@@ -181,6 +190,13 @@ _ARM_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Spot fulfillment share", "mean_spot_fulfilled_share", "{:.4f}"),
     ("Tank refills", "mean_tank_refills", "{:.1f}"),
     ("Liters applied", "mean_liters_applied", "{:.1f}"),
+    ("Weather-gate decisions", "mean_weather_requests", "{:.1f}"),
+    ("Refused: wind", "mean_weather_wind_blocked", "{:.1f}"),
+    ("Refused: rain", "mean_weather_rain_blocked", "{:.1f}"),
+    ("Allowed by weather", "mean_weather_allowed", "{:.1f}"),
+    ("Allowed but rain-washed", "mean_weather_washed", "{:.1f}"),
+    ("Weather-allowed share", "mean_weather_allowed_share", "{:.4f}"),
+    ("Mean retained efficacy share", "mean_weather_retained_efficacy", "{:.4f}"),
     ("Attention solvent share", "mean_attention_solvent_share", "{:.4f}"),
     ("Attention capacity per capita", "mean_attention_capacity_per_capita", "{:.3f}"),
     ("Grounded-yield share", "mean_grounded_yield_share", "{:.4f}"),
@@ -288,6 +304,7 @@ def markdown_report(results: dict[str, Any]) -> str:
         f"- `reproduction_correctness_weight`: `{config['reproduction_correctness_weight']}`",
         f"- Policy arms: `{', '.join(config['policy_arms'])}`",
         f"- Per-Tot spray tanks: `{config.get('sprayer_fleet')}`",
+        f"- Weather-gated efficacy: `{config.get('spray_weather')}`",
         f"- Global spray-budget capacity: `{config.get('spray_budget_capacity')}`",
         "",
         "## Exploitable margin",
@@ -385,6 +402,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Steps per spray-budget interval; only used with --spray-budget-capacity.",
     )
     add_sprayer_fleet_arguments(parser)
+    add_spray_weather_arguments(parser)
     parser.add_argument(
         "--legacy-ecology",
         action="store_true",

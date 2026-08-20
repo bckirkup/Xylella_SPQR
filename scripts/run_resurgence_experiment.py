@@ -32,6 +32,10 @@ from grain_guard.analysis.resurgence import (
     SPRAY_POLICIES,
     run_resurgence_experiment,
 )
+from grain_guard.analysis.weather_options import (
+    add_spray_weather_arguments,
+    spray_weather_config_from_args,
+)
 
 DEFAULT_SEEDS = tuple(range(1000, 1021))
 DEFAULT_STEPS = 400
@@ -52,6 +56,12 @@ _POLICY_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Spot fulfillment share", "mean_spot_fulfilled_share", "{:.4f}"),
     ("Tank refills", "mean_refills", "{:.0f}"),
     ("Liters applied", "mean_liters_applied", "{:.1f}"),
+    ("Weather-gate decisions", "mean_weather_requests", "{:.0f}"),
+    ("Refused: wind", "mean_weather_wind_blocked", "{:.0f}"),
+    ("Refused: rain", "mean_weather_rain_blocked", "{:.0f}"),
+    ("Allowed by weather", "mean_weather_allowed", "{:.0f}"),
+    ("Allowed but rain-washed", "mean_weather_washed", "{:.0f}"),
+    ("Mean retained efficacy share", "mean_weather_retained_efficacy", "{:.4f}"),
     ("Primary pest density", "mean_primary_density", "{:.1f}"),
     ("Secondary pest density", "mean_secondary_density", "{:.1f}"),
     ("Total pest density", "mean_total_density", "{:.1f}"),
@@ -101,6 +111,7 @@ def markdown_report(results: dict[str, Any]) -> str:
         f" efficacy `{config['spray_efficacy']}`,"
         f" precise threshold `{config['spray_threshold']}`",
         f"- Per-Tot spray tanks: `{config.get('sprayer_fleet')}`",
+        f"- Weather gating: `{config.get('spray_weather')}`",
         f"- Global spray-budget capacity: `{config.get('spray_budget_capacity')}`",
         "",
         "## Verdict",
@@ -143,6 +154,11 @@ def markdown_report(results: dict[str, Any]) -> str:
             "  refill travel and downtime, while a whole-field pass is served by the boom",
             "  sprayer: targeting is scarce, total pesticide load is not capped, so the",
             "  ecological penalty for over-spraying is left intact.",
+            "- With `--spray-weather`, an application is refused when the wind would carry",
+            "  the product off target and loses part of its dose to rain falling on it. A",
+            "  weather refusal is checked before the tank, so it wastes the opportunity but",
+            "  not the product. One boom pass is one weather decision; each spot request is",
+            "  its own.",
             "- Resurgence counts only when the indiscriminate policy ends with lower yield",
             "  than the precise policy and more final pests than not spraying. Requiring both",
             "  prevents crop collapse from masquerading as pest control: yield integrates the",
@@ -199,6 +215,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Steps per spray-budget interval; only used with --spray-budget-capacity.",
     )
     add_sprayer_fleet_arguments(parser)
+    add_spray_weather_arguments(parser)
     parser.add_argument(
         "--legacy-ecology",
         action="store_true",
@@ -228,6 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         spray_budget_capacity=args.spray_budget_capacity,
         spray_budget_interval_steps=args.spray_budget_interval,
         sprayer_fleet_config=sprayer_fleet_config_from_args(args),
+        spray_weather_config=spray_weather_config_from_args(args),
     )
     json_path, report_path = write_artifacts(results, out_dir)
     verdict = results["verdict"]

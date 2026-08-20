@@ -20,6 +20,7 @@ from statistics import fmean
 from typing import Any
 
 from grain_guard.adapter.grain_adapter import SPRAY_EFFICACY, GrainGuardAdapter
+from grain_guard.environment.spray_weather import SprayWeatherConfig
 from grain_guard.equipment.sprayer_fleet import SprayerFleetConfig
 
 NO_SPRAY = "no_spray"
@@ -53,6 +54,8 @@ class ResurgenceRun:
         mean_crop_health: field-mean crop health at the last step.
         final_yield_potential: field-mean yield potential at the last step.
         sprayer_fleet: per-Tot tank metrics, or ``None`` with unlimited capacity.
+        spray_weather: weather-gate metrics, or ``None`` when weather does not
+            gate applications.
 
     Damage in this domain is monotone (``CropCell.apply_damage`` never heals),
     so ``final_yield_potential`` is the integral of the harm a policy allowed,
@@ -78,6 +81,7 @@ class ResurgenceRun:
     mean_crop_health: float
     final_yield_potential: float
     sprayer_fleet: dict[str, float | int] | None = None
+    spray_weather: dict[str, float | int] | None = None
 
 
 def _spray_targets(
@@ -128,6 +132,7 @@ def run_resurgence_arm(
     spray_budget_capacity: int | None = None,
     spray_budget_interval_steps: int = 7,
     sprayer_fleet_config: SprayerFleetConfig | None = None,
+    spray_weather_config: SprayWeatherConfig | None = None,
 ) -> ResurgenceRun:
     """Run one spray policy against the domain and report its end state.
 
@@ -155,6 +160,7 @@ def run_resurgence_arm(
         ecology_config=ecology_config,
         spray_budget_config=spray_budget_config,
         sprayer_fleet_config=sprayer_fleet_config,
+        spray_weather_config=spray_weather_config,
     )
     sprays = 0
     denied = 0
@@ -194,6 +200,7 @@ def run_resurgence_arm(
         mean_crop_health=field.mean_crop_health(),
         final_yield_potential=field.mean_yield_potential(),
         sprayer_fleet=adapter.sprayer_fleet_metrics,
+        spray_weather=adapter.spray_weather_metrics,
     )
 
 
@@ -224,12 +231,24 @@ def summarize_policy(policy: str, runs: Sequence[ResurgenceRun]) -> dict[str, An
         "mean_spot_denied_worked_out": _fleet_mean(runs, "spot_denied_worked_out"),
         "mean_spot_fulfilled_share": _fleet_mean(runs, "spot_fulfilled_share"),
         "mean_liters_applied": _fleet_mean(runs, "liters_applied"),
+        "mean_weather_requests": _weather_mean(runs, "requests"),
+        "mean_weather_wind_blocked": _weather_mean(runs, "wind_blocked"),
+        "mean_weather_rain_blocked": _weather_mean(runs, "rain_blocked"),
+        "mean_weather_allowed": _weather_mean(runs, "allowed"),
+        "mean_weather_washed": _weather_mean(runs, "washed"),
+        "mean_weather_retained_efficacy": _weather_mean(runs, "mean_retained_efficacy"),
     }
 
 
 def _fleet_mean(runs: Sequence[ResurgenceRun], key: str) -> float | None:
     """Mean of one fleet metric, or ``None`` when capacity was unlimited."""
     values = [float(run.sprayer_fleet[key]) for run in runs if run.sprayer_fleet is not None]
+    return fmean(values) if values else None
+
+
+def _weather_mean(runs: Sequence[ResurgenceRun], key: str) -> float | None:
+    """Mean of one weather-gate metric, or ``None`` when weather did not gate."""
+    values = [float(run.spray_weather[key]) for run in runs if run.spray_weather is not None]
     return fmean(values) if values else None
 
 
@@ -287,6 +306,7 @@ def run_resurgence_experiment(
     spray_budget_capacity: int | None = None,
     spray_budget_interval_steps: int = 7,
     sprayer_fleet_config: SprayerFleetConfig | None = None,
+    spray_weather_config: SprayWeatherConfig | None = None,
 ) -> dict[str, Any]:
     """Run every policy over every seed and pool the comparison."""
     runs = [
@@ -301,6 +321,7 @@ def run_resurgence_experiment(
             spray_budget_capacity=spray_budget_capacity,
             spray_budget_interval_steps=spray_budget_interval_steps,
             sprayer_fleet_config=sprayer_fleet_config,
+            spray_weather_config=spray_weather_config,
         )
         for policy in policies
         for seed in seeds
@@ -319,6 +340,9 @@ def run_resurgence_experiment(
             "spray_budget_interval_steps": spray_budget_interval_steps,
             "sprayer_fleet": (
                 sprayer_fleet_config.model_dump() if sprayer_fleet_config is not None else None
+            ),
+            "spray_weather": (
+                spray_weather_config.model_dump() if spray_weather_config is not None else None
             ),
             "spray_interval": spray_interval,
             "spray_threshold": spray_threshold,

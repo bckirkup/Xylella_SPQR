@@ -44,6 +44,7 @@ _OBJECT_ADAPTER_KEYS: tuple[str, ...] = (
     "ecology_config",
     "spray_budget_config",
     "sprayer_fleet_config",
+    "spray_weather_config",
 )
 
 
