@@ -24,6 +24,7 @@ from tattletots.models.user import User
 
 from grain_guard.environment.field import CropField, EcologyConfig, LandscapeType
 from grain_guard.environment.pest import PestPopulation
+from grain_guard.environment.spray_weather import SprayWeatherConfig, SprayWeatherGate
 from grain_guard.environment.weather import AgWeather
 from grain_guard.equipment.sprayer_fleet import SprayerFleet, SprayerFleetConfig
 from grain_guard.sensors.drone_imagery import DroneImager
@@ -136,6 +137,7 @@ class GrainGuardAdapter(DomainAdapter):
         ecology_config: EcologyConfig | dict[str, object] | None = None,
         spray_budget_config: SprayBudgetConfig | dict[str, object] | None = None,
         sprayer_fleet_config: SprayerFleetConfig | dict[str, object] | None = None,
+        spray_weather_config: SprayWeatherConfig | dict[str, object] | None = None,
         seed: int = 42,
     ) -> None:
         self.rng = np.random.default_rng(seed)
@@ -172,6 +174,7 @@ class GrainGuardAdapter(DomainAdapter):
         self._spray_budget_window = -1
         self._spray_budget_remaining = 0
         self._sprayer_fleet = self._build_sprayer_fleet(sprayer_fleet_config)
+        self._spray_weather = self._build_spray_weather(spray_weather_config)
         self._spray_attempts = 0
         self._sprays_applied = 0
         self._sprays_denied = 0
@@ -205,6 +208,22 @@ class GrainGuardAdapter(DomainAdapter):
         if self._sprayer_fleet is None:
             return None
         return self._sprayer_fleet.metrics()
+
+    @property
+    def spray_weather_metrics(self) -> dict[str, float | int] | None:
+        """Weather-gate refusals and wash-off; ``None`` if weather does not gate."""
+        if self._spray_weather is None:
+            return None
+        return self._spray_weather.metrics()
+
+    @staticmethod
+    def _build_spray_weather(
+        config: SprayWeatherConfig | dict[str, object] | None,
+    ) -> SprayWeatherGate | None:
+        """Gate applications on wind and rain, or let weather be irrelevant."""
+        if config is None:
+            return None
+        return SprayWeatherGate(config=SprayWeatherConfig.model_validate(config))
 
     def _build_sprayer_fleet(
         self, config: SprayerFleetConfig | dict[str, object] | None
@@ -614,11 +633,18 @@ class GrainGuardAdapter(DomainAdapter):
             self._spray_budget_window = window
             self._spray_budget_remaining = self._spray_budget.capacity
 
-    def dispatch_spray(self, row: int, col: int) -> bool:
-        """Spot-spray one cell if permission and physical capacity both allow it.
+    def _gated_efficacy(self) -> float | None:
+        """Efficacy today's weather allows, or ``None`` if it refuses the spray."""
+        if self._spray_weather is None:
+            return SPRAY_EFFICACY
+        return self._spray_weather.effective_efficacy(SPRAY_EFFICACY, self._weather)
 
-        Regulatory permission is checked before equipment so a request refused
-        by a quota does not consume product from a tank.
+    def dispatch_spray(self, row: int, col: int) -> bool:
+        """Spot-spray one cell if permission, weather, and capacity all allow it.
+
+        Regulatory permission and the weather are checked before equipment so a
+        request that could never have been made does not consume product from a
+        tank: nobody draws a dose for a spray the wind forbids.
         """
         if row < 0 or col < 0 or row >= self._field.rows or col >= self._field.cols:
             return False
@@ -627,12 +653,16 @@ class GrainGuardAdapter(DomainAdapter):
         if self._spray_budget is not None and self._spray_budget_remaining == 0:
             self._sprays_denied += 1
             return False
+        efficacy = self._gated_efficacy()
+        if efficacy is None:
+            self._sprays_denied += 1
+            return False
         if self._sprayer_fleet is not None and not self._sprayer_fleet.request_spot_application(
             row, col, self._current_step
         ):
             self._sprays_denied += 1
             return False
-        self._field.apply_pesticide(row, col, SPRAY_EFFICACY, self.rng)
+        self._field.apply_pesticide(row, col, efficacy, self.rng)
         if self._spray_budget is not None:
             self._spray_budget_remaining -= 1
         self._sprays_applied += 1
@@ -654,9 +684,13 @@ class GrainGuardAdapter(DomainAdapter):
         if self._sprayer_fleet is None:
             return [(row, col) for row, col in in_bounds if self.dispatch_spray(row, col)]
         self._spray_attempts += len(in_bounds)
+        efficacy = self._gated_efficacy()
+        if efficacy is None:
+            self._sprays_denied += len(in_bounds)
+            return []
         served = self._sprayer_fleet.request_broadcast_pass(in_bounds, self._current_step)
         for row, col in served:
-            self._field.apply_pesticide(row, col, SPRAY_EFFICACY, self.rng)
+            self._field.apply_pesticide(row, col, efficacy, self.rng)
         self._sprays_applied += len(served)
         self._sprays_denied += len(in_bounds) - len(served)
         return served
@@ -908,6 +942,15 @@ class GrainGuardAdapter(DomainAdapter):
     def weather(self) -> AgWeather:
         """Expose current weather state."""
         return self._weather
+
+    @weather.setter
+    def weather(self, weather: AgWeather) -> None:
+        """Impose a weather state, for replaying a named day rather than a seed.
+
+        The next call to :meth:`step` evolves the weather again, so this holds
+        only for the applications made before it.
+        """
+        self._weather = weather
 
     @property
     def engine_max_dim(self) -> int:

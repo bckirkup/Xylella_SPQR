@@ -297,6 +297,7 @@ def measure_designed_arm(
         "pest_selection_differential": pest.get("selection_differential"),
         "spray_budget": run.adapter.spray_budget_metrics,
         "sprayer_fleet": run.adapter.sprayer_fleet_metrics,
+        "spray_weather": run.adapter.spray_weather_metrics,
         "evidence_rates": designed_evidence_rates(run.world),
         "oracle_policy_instances": oracle_policy_instances(run.world),
         "cohorts": _cohort_split(list(run.tracker.records.values())),
@@ -439,6 +440,15 @@ def summarize_policy_arm(policy_arm: str, records: Sequence[dict[str, Any]]) -> 
         "mean_spot_fulfilled_share": _nested_mean(records, "sprayer_fleet", "spot_fulfilled_share"),
         "mean_tank_refills": _nested_mean(records, "sprayer_fleet", "refills"),
         "mean_liters_applied": _nested_mean(records, "sprayer_fleet", "liters_applied"),
+        "mean_weather_requests": _nested_mean(records, "spray_weather", "requests"),
+        "mean_weather_wind_blocked": _nested_mean(records, "spray_weather", "wind_blocked"),
+        "mean_weather_rain_blocked": _nested_mean(records, "spray_weather", "rain_blocked"),
+        "mean_weather_allowed": _nested_mean(records, "spray_weather", "allowed"),
+        "mean_weather_washed": _nested_mean(records, "spray_weather", "washed"),
+        "mean_weather_retained_efficacy": _nested_mean(
+            records, "spray_weather", "mean_retained_efficacy"
+        ),
+        "mean_weather_allowed_share": _nested_mean(records, "spray_weather", "allowed_share"),
         "mean_any_evidence_rate": _nested_mean(records, "evidence_rates", "any_evidence_rate"),
         "mean_trap_evidence_rate": _nested_mean(records, "evidence_rates", "trap_evidence_rate"),
         "mean_drone_evidence_rate": _nested_mean(records, "evidence_rates", "drone_evidence_rate"),
