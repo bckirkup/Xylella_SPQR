@@ -100,6 +100,79 @@ pin down strict `>`) and on real `per_seed` blocks from a scratch run.
   return `best_arm=None` and `exploitable_margin_pp=None` — the oracle must
   never be promoted into the reachable-precision slot.
 
+## Pick a scratch window where the null is not degenerate
+
+Short windows can make the margin untestable: at 60 and 120 steps the
+designed-reporter `static_prior_null` pins at exactly `1.0`, so
+`margin = best - null` is degenerate and no knob can move it. Before sweeping
+anything, run one scratch config and check `margin.static_prior_null` is strictly
+between 0 and 1. Two seeds × 200 steps gave a null of ~0.64 and took ~52 s with
+`--workers 2` — that is the smallest known-good designed-reporter scratch window.
+Resurgence scratch runs are cheaper (2 seeds × 100 steps, ~22 s).
+
+## Prove a finite-resource (capacity) config is load-bearing
+
+For a scarcity knob such as `SprayerFleetConfig`, sweep **one knob at a time**
+across three values on the same scratch config and require graded, monotone
+movement in the served/denied counters — not just "the numbers differ":
+
+| knob | expect as it grows |
+|---|---|
+| tank volume, sprayer count | `spot_granted` and `spot_fulfilled_share` up, `spot_denied_refilling` down |
+| applications per step | `spot_granted` up, `spot_denied_worked_out` down |
+| refill duration | `spot_denied_refilling` up, `spot_granted` down |
+
+Then two controls that catch a cosmetic config:
+
+- **Tamper / convergence**: make capacity effectively infinite
+  (`--spot-tank-liters 1e6 --n-spot-sprayers 64 --applications-per-step 10000
+  --refill-duration 0`). `spot_fulfilled_share` must be exactly `1.0`, all denial
+  counters `0`, **and** `best_reachable_precision` / `ordinary_precision` /
+  `mean_sprays_applied` must equal the no-flag run *exactly*. An exact match is
+  the expectation, because the capacity check should be the only added branch;
+  mere "closeness" means the flag perturbs the RNG or the dispatch order.
+- **Flag isolation**: with the flag off, every new metric must be `None` and the
+  numbers must match `origin/main` run through a `git worktree` with the
+  byte-identical command.
+
+## A deliberately uncapped resource needs its own negative control
+
+When a design says one resource is finite but another is *deliberately* not
+(here: per-drone spot tanks are finite, boom/broadcast volume is not, because of
+headland top-up), "the uncapped arm is unchanged" is only half the proof — an
+unwired config would also leave it unchanged. Turn the escape hatch off and show
+the arm *does* change:
+
+```python
+run_resurgence_arm("indiscriminate", seed, steps=100,
+                   sprayer_fleet_config=SprayerFleetConfig(broadcast_headland_refill=False))
+```
+
+With top-up on, the indiscriminate arm was identical to no-fleet (8800 sprays,
+0 denied); with it off, half the passes were denied and beneficial density rose
+an order of magnitude. Note `run_resurgence_experiment` raises
+`ValueError: resurgence verdict needs both the indiscriminate and precise
+policies`, so to probe a **single** policy call `run_resurgence_arm` per seed and
+aggregate with `summarize_policy` instead of asking the experiment for one arm.
+
+## Prove the boundary at runtime with call stacks, not just greps
+
+A structural grep only covers the module you grep. To show the reporter and the
+new subsystem never read truth, monkeypatch every truth accessor
+(`GrainGuardAdapter.get_ground_truth`, `get_active_locations`, `_pest_severity`,
+`CropField.cells_above_threshold`) and wrap `GrainGuardAdapter._field` in a
+property that records `traceback.extract_stack()` on each access, then run one
+short `measure_designed_arm`. Assert no recorded stack contains a frame from
+`reporter_policy.py`, the new subsystem's module, or the reporting/aggregation
+functions. Expect the legitimate callers to be exactly engine scoring
+(`instrument.validate_instrument`), the domain step (`tattletots_layer.step`) and
+dispatch judging — `_field` was touched ~5300 times and none from the reporter.
+Also assert the scarcity ordering uses published fields only: give the fleet
+capacity for exactly one application and hand it targets whose
+`cop_threat_level` order is *inverted* relative to true density; the served cell
+must be the highest published threat, and a denied application must leave pest
+and beneficial densities bit-identical.
+
 ## Price the precision
 
 A designed reporter buys precision with silence, so always publish the price next
