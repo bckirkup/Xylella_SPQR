@@ -13,12 +13,16 @@ returns Results, Methods and tables, including for paywalled articles — query
 construction, filter behaviour, result handling, and recording which section of
 the paper a number was read from.
 
-This skill is the other half: what needs sourcing in [GrainGuard], and what a hit is
+This skill is the other half: what needs sourcing in GrainGuard, and what a hit is
 allowed to become here.
 
 ## Query construction
 
-- Good: `Rhopalosiphum maidis intrinsic rate of increase constant temperature life table` (also: `aphid development time degree days generation`)
+In entomology and agronomy the measured quantity is almost always named with
+its conditions:
+
+- Good: `Rhopalosiphum maidis intrinsic rate of increase constant temperature life table`
+- Weak: `how fast do aphids reproduce`
 
 Quantities this repo needs sourced, and the words that find them:
 
@@ -35,18 +39,22 @@ Quantities this repo needs sourced, and the words that find them:
 - Detection — `pheromone trap catch efficiency`, `sampling plan`,
   `UAV multispectral detection`, `sensitivity`, `detection limit`.
 
+Search for the mechanism, then separately for the number. Use scientific
+binomials once you know which species stands behind `PestSpecies.APHID` in the
+scenario you are sourcing — a genus-level query returns reviews, a binomial
+query returns life tables.
+
 ## Filter discipline
+
+Specific to this repo:
 
 - `medical_mode=true` is useless here — it restricts to ~8M medical documents
   and will discard the entire agricultural entomology literature.
-
 - `human=true`, `controlled`, `sample_size_min` and `study_types` describe
   clinical designs. A field trial with four replicated blocks is none of them
   and will be filtered out.
-
 - `domain="agri,bio,env"` is the useful narrowing when a query drags in
   unrelated fields.
-
 - Do **not** set `year_min`. The canonical degree-day and economic-injury work
   is decades old and has not been superseded.
 
@@ -112,3 +120,6 @@ designed-reporter result, a gradient arm, a precision or recall figure in
 underneath them was sourced independently; screening candidate papers by which
 value helps turns a measurement of the architecture into a measurement of the
 search.
+
+If a sourced constant makes an arm look worse, that is a result: report
+it.
