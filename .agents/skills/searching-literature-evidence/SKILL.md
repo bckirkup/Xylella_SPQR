@@ -1,27 +1,25 @@
 ---
 name: searching-literature-evidence
-description: Search the peer-reviewed literature with the Consensus MCP server to source a GrainGuard parameter — pest phenology, resistance genetics, behavioural escape, damage rates, trap and sensor detection, economic injury levels — including query construction, filter discipline, and how a hit becomes a provenance comment with an evidence grade. Use whenever a biological or agronomic constant needs a citation, or when asked what the literature says about a mechanism.
+description: Search the peer-reviewed literature with the Consensus MCP server to source a GrainGuard parameter — pest phenology, resistance genetics, behavioural escape, damage rates, trap and sensor detection, economic injury levels — including how a hit becomes a provenance comment with an evidence grade. Use whenever a biological or agronomic constant needs a citation, or when asked what the literature says about a mechanism. Pairs with the org-level consensus-literature-retrieval skill, which owns retrieval mechanics.
 ---
 
 # Searching the Literature (Consensus MCP)
 
-The `consensus` MCP server has one tool, `search`, over ~220M papers
-(Semantic Scholar, PubMed, Scopus, ArXiv). It returns title, authors, year,
-journal, citation count, DOI, a Consensus URL, and the abstract.
+## Retrieval mechanics are in the org-level skill
 
-```
-mcp_tool(command="call_tool", server="consensus", tool_name="search",
-         tool_args='{"query": "aphid development time degree days generation"}')
-```
+Load `consensus-literature-retrieval` (`~/.agents/skills/`) before searching. It
+owns the tool surface, `include_full_text_chunks: true` — which is mandatory and
+returns Results, Methods and tables, including for paywalled articles — query
+construction, filter behaviour, result handling, and recording which section of
+the paper a number was read from.
 
-Run `mcp_tool(command="list_tools", server="consensus")` for the current
-parameter list before using an unfamiliar filter.
+This skill is the other half: what needs sourcing in GrainGuard, and what a hit is
+allowed to become here.
 
 ## Query construction
 
-Query in the vocabulary of the paper you want, not the question you have. In
-entomology and agronomy the measured quantity is almost always named with its
-conditions:
+In entomology and agronomy the measured quantity is almost always named with
+its conditions:
 
 - Good: `Rhopalosiphum maidis intrinsic rate of increase constant temperature life table`
 - Weak: `how fast do aphids reproduce`
@@ -48,8 +46,7 @@ query returns life tables.
 
 ## Filter discipline
 
-Default to **no filters**; every filter silently removes evidence. Specific to
-this repo:
+Specific to this repo:
 
 - `medical_mode=true` is useless here — it restricts to ~8M medical documents
   and will discard the entire agricultural entomology literature.
@@ -60,26 +57,6 @@ this repo:
   unrelated fields.
 - Do **not** set `year_min`. The canonical degree-day and economic-injury work
   is decades old and has not been superseded.
-- `sjr_max=1` gives Q1 only; never reach for `sjr_min`, which *excludes* the top
-  tiers, and would drop exactly the applied-entomology journals this repo needs.
-
-Filters reorder as well as remove: the top hit for the same query changes when
-`domain` and `year_min` are set. Re-run a promising query without filters before
-calling any value *the* measurement.
-
-## Result handling
-
-- Default page returns 20 papers; `page_size` narrows it (5 works). `page=1`
-  returns a genuinely different set on this organisation's plan, so paginate
-  when the first page is all reviews.
-- Twenty abstracts overflow the tool result. The output is truncated and the
-  full text written to a file named in the truncation notice — **read that
-  file**. Items 15-20 are frequently the measurement papers, because reviews
-  rank higher.
-- Life-table and yield-loss numbers usually live in a table, not the abstract.
-  Open the DOI when the constant matters.
-- Consensus asks for numbered inline citations with hyperlinked titles and the
-  exact URLs it returned. Preserve the DOI when it gives one.
 
 ## A rate is not a constant — capture its conditions
 
@@ -144,8 +121,5 @@ underneath them was sourced independently; screening candidate papers by which
 value helps turns a measurement of the architecture into a measurement of the
 search.
 
-Fix the query and the filters from the definition of the quantity, before
-looking at what the arm needs. If several papers measure it, take a stated
-central value or the midpoint of the range and say which — not the end that
-helps. If a sourced constant makes an arm look worse, that is a result: report
+If a sourced constant makes an arm look worse, that is a result: report
 it.
